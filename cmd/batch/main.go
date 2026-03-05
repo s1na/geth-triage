@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/sina-geth/geth-triage/internal/analyzer"
 	"github.com/sina-geth/geth-triage/internal/anthropic"
+	"github.com/sina-geth/geth-triage/internal/claude"
 	"github.com/sina-geth/geth-triage/internal/config"
 	ghclient "github.com/sina-geth/geth-triage/internal/github"
 	"github.com/sina-geth/geth-triage/internal/store"
@@ -56,6 +57,11 @@ func main() {
 		opts = append(opts, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
 	default:
 		log.Fatal().Str("type", cfg.AnalyzerType).Msg("unknown ANALYZER_TYPE")
+	}
+
+	if cfg.UsageThreshold > 0 {
+		uc := claude.NewUsageChecker()
+		opts = append(opts, analyzer.WithUsageChecker(uc, cfg.UsageThreshold))
 	}
 
 	az := analyzer.NewOrchestrator(prAnalyzer, db, log, opts...)

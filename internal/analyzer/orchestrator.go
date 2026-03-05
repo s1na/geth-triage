@@ -58,13 +58,34 @@ func (o *Orchestrator) AnalyzeSingle(ctx context.Context, pr github.PRData) (*st
 func (o *Orchestrator) analyzeSequential(ctx context.Context, prs []github.PRData) error {
 	o.log.Info().Int("count", len(prs)).Msg("analyzing PRs sequentially")
 
-	for _, pr := range prs {
+	for i, pr := range prs {
+		if err := o.checkUsageThreshold(ctx); err != nil {
+			o.log.Warn().Err(err).Int("remaining", len(prs)-i).Msg("pausing analysis due to usage threshold")
+			return nil
+		}
+
 		_, err := o.AnalyzeSingle(ctx, pr)
 		if err != nil {
 			o.log.Error().Err(err).Int("pr", pr.Number).Msg("failed to analyze PR")
 			continue
 		}
 		o.log.Info().Int("pr", pr.Number).Msg("analyzed PR")
+	}
+	return nil
+}
+
+func (o *Orchestrator) checkUsageThreshold(ctx context.Context) error {
+	if o.usageChecker == nil || o.usageThreshold <= 0 {
+		return nil
+	}
+	utilization, err := o.usageChecker.CheckUsage(ctx)
+	if err != nil {
+		o.log.Warn().Err(err).Msg("failed to check usage, continuing anyway")
+		return nil
+	}
+	o.log.Info().Float64("utilization", utilization).Float64("threshold", o.usageThreshold).Msg("usage check")
+	if utilization >= o.usageThreshold {
+		return fmt.Errorf("usage at %.0f%% (threshold %.0f%%)", utilization, o.usageThreshold)
 	}
 	return nil
 }

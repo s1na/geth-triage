@@ -28,6 +28,11 @@ type AnalysisResult struct {
 	OutputTokens  int     `json:"output_tokens"`
 }
 
+// UsageChecker checks current API usage. Returns utilization (0-100) and error.
+type UsageChecker interface {
+	CheckUsage(ctx context.Context) (float64, error)
+}
+
 // Orchestrator manages analysis scheduling, batching, and persistence.
 // It delegates the actual analysis to a PRAnalyzer implementation.
 type Orchestrator struct {
@@ -36,6 +41,8 @@ type Orchestrator struct {
 	log            zerolog.Logger
 	batchAnalyzer  BatchAnalyzer
 	batchThreshold int
+	usageChecker   UsageChecker
+	usageThreshold float64
 }
 
 // BatchAnalyzer is an optional interface for analyzers that support async batch processing.
@@ -64,5 +71,14 @@ func WithBatchAnalyzer(ba BatchAnalyzer, threshold int) OrchestratorOption {
 	return func(o *Orchestrator) {
 		o.batchAnalyzer = ba
 		o.batchThreshold = threshold
+	}
+}
+
+// WithUsageChecker enables usage-based throttling. Analysis is paused
+// when utilization exceeds threshold (0-100).
+func WithUsageChecker(uc UsageChecker, threshold float64) OrchestratorOption {
+	return func(o *Orchestrator) {
+		o.usageChecker = uc
+		o.usageThreshold = threshold
 	}
 }

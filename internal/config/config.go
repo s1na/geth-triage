@@ -29,6 +29,11 @@ type Config struct {
 	ClaudeCodeModel     string        `env:"CLAUDE_CODE_MODEL" envDefault:"sonnet"`
 	ClaudeCodeMaxBudget string        `env:"CLAUDE_CODE_MAX_BUDGET" envDefault:"0.50"`
 	ClaudeCodeTimeout   time.Duration `env:"CLAUDE_CODE_TIMEOUT" envDefault:"5m"`
+
+	// Usage threshold (0-100): pause analysis when Claude session utilization exceeds this %.
+	// The OAuth usage API reports a 5-hour rolling window utilization.
+	// Set to 0 to disable usage checking.
+	UsageThreshold float64 `env:"USAGE_THRESHOLD" envDefault:"80"`
 }
 
 func Load() (*Config, error) {
