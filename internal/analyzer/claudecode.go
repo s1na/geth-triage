@@ -59,7 +59,11 @@ AI-generated PR signals (lower trust):
 - Generic descriptions, boilerplate commit messages
 - Changes that don't compile or have no tests
 - Cosmetic-only changes across many files
-- "Improve code quality" without specific motivation`
+- "Improve code quality" without specific motivation
+
+## CRITICAL: Output Format
+
+Do NOT state your categorization in intermediate responses while using tools. Gather all evidence first, then provide your final categorization ONLY in your last response. Your final response will be automatically validated against a JSON schema — just provide the structured JSON object as your final answer.`
 
 // analysisSchema is the JSON schema enforced via --json-schema for structured output.
 var analysisSchema = func() string {
@@ -242,7 +246,12 @@ func (c *ClaudeCodeAnalyzer) parseOutput(raw []byte) (*AnalysisResult, error) {
 		Msg("claude code usage")
 
 	if envelope.StructuredOutput == nil {
-		return nil, fmt.Errorf("no structured_output in response\nraw result: %s", envelope.Result)
+		c.log.Error().
+			Str("result", envelope.Result).
+			Float64("cost_usd", envelope.TotalCostUSD).
+			Int("num_turns", envelope.NumTurns).
+			Msg("structured_output was null — model likely stated categorization in intermediate tool-use turn instead of final response")
+		return nil, fmt.Errorf("no structured_output in response (cost=$%.2f, turns=%d)", envelope.TotalCostUSD, envelope.NumTurns)
 	}
 	result := envelope.StructuredOutput
 
