@@ -129,7 +129,7 @@ func NewClaudeCodeAnalyzer(repoPath, model, maxBudget string, timeout time.Durat
 func (c *ClaudeCodeAnalyzer) EnsureRepo(ctx context.Context) error {
 	if _, err := os.Stat(c.repoPath); os.IsNotExist(err) {
 		c.log.Info().Str("path", c.repoPath).Msg("cloning go-ethereum repository")
-		cmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", "https://github.com/ethereum/go-ethereum.git", c.repoPath)
+		cmd := exec.CommandContext(ctx, "git", "clone", "https://github.com/ethereum/go-ethereum.git", c.repoPath)
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -139,18 +139,54 @@ func (c *ClaudeCodeAnalyzer) EnsureRepo(ctx context.Context) error {
 		return nil
 	}
 
-	c.log.Info().Str("path", c.repoPath).Msg("updating go-ethereum repository")
-	cmd := exec.CommandContext(ctx, "git", "-C", c.repoPath, "pull", "--ff-only")
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	return c.resetRepo(ctx)
+}
+
+// resetRepo ensures the repo is on a clean master branch with latest upstream.
+func (c *ClaudeCodeAnalyzer) resetRepo(ctx context.Context) error {
+	c.log.Info().Str("path", c.repoPath).Msg("resetting go-ethereum repository")
+	git := func(args ...string) error {
+		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", c.repoPath}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("git %s: %w\n%s", args[0], err, out)
+		}
+		return nil
+	}
+
+	// Check for uncommitted changes (would indicate a previous agent left dirt)
+	cmd := exec.CommandContext(ctx, "git", "-C", c.repoPath, "status", "--porcelain")
+	out, err := cmd.Output()
+	if err == nil && len(out) > 0 {
+		c.log.Warn().Str("changes", string(out)).Msg("go-ethereum repo has uncommitted changes, resetting")
+	}
+
+	// Hard reset and checkout master
+	if err := git("checkout", "master"); err != nil {
+		return err
+	}
+	if err := git("reset", "--hard", "origin/master"); err != nil {
+		return err
+	}
+	if err := git("clean", "-fd"); err != nil {
+		return err
+	}
+
+	// Pull latest
+	if err := git("pull", "--ff-only"); err != nil {
 		c.log.Warn().Err(err).Msg("git pull failed, continuing with existing checkout")
 	}
+
 	return nil
 }
 
 // AnalyzePR implements PRAnalyzer by invoking claude --print with the PR data.
 func (c *ClaudeCodeAnalyzer) AnalyzePR(ctx context.Context, pr github.PRData) (*AnalysisResult, error) {
+	// Ensure clean working tree before each analysis
+	if err := c.resetRepo(ctx); err != nil {
+		return nil, fmt.Errorf("reset repo: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
