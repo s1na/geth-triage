@@ -1,0 +1,25 @@
+# Binaries
+geth-triage
+batch-init
+test-pr
+*.exe
+
+# Data
+data/
+*.db
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+/tmp/
