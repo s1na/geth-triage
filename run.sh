@@ -1,7 +1,5 @@
 #!/bin/bash
-set -a
-source .env
-set +a
+# .env is loaded automatically by the binary
 export DB_PATH=./data/geth-triage.db
 export LISTEN_ADDR=:8443
 export HTTP_LISTEN_ADDR=:8080

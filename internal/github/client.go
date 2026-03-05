@@ -6,9 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	gh "github.com/google/go-github/v68/github"
-	"golang.org/x/oauth2"
+	"time"
 )
 
 const (
@@ -17,123 +15,197 @@ const (
 )
 
 type Client struct {
-	gh           *gh.Client
+	token        string
+	httpClient   *http.Client
 	maxDiffLines int
 }
 
 func NewClient(token string, maxDiffLines int) *Client {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	tc := oauth2.NewClient(context.Background(), ts)
 	return &Client{
-		gh:           gh.NewClient(tc),
+		token:        token,
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
 		maxDiffLines: maxDiffLines,
 	}
 }
 
 func (c *Client) ListOpenPRs(ctx context.Context) ([]PRData, error) {
 	var allPRs []PRData
-	opts := &gh.PullRequestListOptions{
-		State:     "open",
-		Sort:      "updated",
-		Direction: "desc",
-		ListOptions: gh.ListOptions{
-			PerPage: 100,
-		},
-	}
+	var cursor *string
 
 	for {
-		prs, resp, err := c.gh.PullRequests.List(ctx, owner, repo, opts)
-		if err != nil {
+		vars := map[string]any{
+			"owner":  owner,
+			"repo":   repo,
+			"cursor": cursor,
+		}
+
+		var data gqlListData
+		if err := c.graphql(ctx, listPRsQuery, vars, &data); err != nil {
 			return nil, fmt.Errorf("list PRs: %w", err)
 		}
-		for _, pr := range prs {
-			var labels []string
-			for _, l := range pr.Labels {
-				labels = append(labels, l.GetName())
-			}
-			allPRs = append(allPRs, PRData{
-				Number:    pr.GetNumber(),
-				Title:     pr.GetTitle(),
-				Author:    pr.GetUser().GetLogin(),
-				State:     pr.GetState(),
-				Labels:    labels,
-				HeadSHA:   pr.GetHead().GetSHA(),
-				Additions: pr.GetAdditions(),
-				Deletions: pr.GetDeletions(),
-				CommentsCount: pr.GetComments() + pr.GetReviewComments(),
-				CreatedAt: pr.GetCreatedAt().Time,
-				UpdatedAt: pr.GetUpdatedAt().Time,
-			})
+
+		prs := data.Repository.PullRequests
+		for _, node := range prs.Nodes {
+			allPRs = append(allPRs, nodeToListPR(node))
 		}
-		if resp.NextPage == 0 {
+
+		if !prs.PageInfo.HasNextPage {
 			break
 		}
-		opts.Page = resp.NextPage
+		cursor = &prs.PageInfo.EndCursor
 	}
 	return allPRs, nil
 }
 
+func nodeToListPR(n gqlPRNode) PRData {
+	var labels []string
+	for _, l := range n.Labels.Nodes {
+		labels = append(labels, l.Name)
+	}
+
+	author := ""
+	if n.Author != nil {
+		author = n.Author.Login
+	}
+
+	createdAt, _ := time.Parse(time.RFC3339, n.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, n.UpdatedAt)
+
+	return PRData{
+		Number:        n.Number,
+		Title:         n.Title,
+		Author:        author,
+		State:         strings.ToLower(n.State),
+		Labels:        labels,
+		HeadSHA:       n.HeadRefOid,
+		Additions:     n.Additions,
+		Deletions:     n.Deletions,
+		CommentsCount: n.Comments.TotalCount + n.Reviews.TotalCount,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	}
+}
+
 func (c *Client) FetchPRDetail(ctx context.Context, number int) (*PRData, error) {
-	pr, _, err := c.gh.PullRequests.Get(ctx, owner, repo, number)
-	if err != nil {
+	vars := map[string]any{
+		"owner":  owner,
+		"repo":   repo,
+		"number": number,
+	}
+
+	var data gqlDetailData
+	if err := c.graphql(ctx, prDetailQuery, vars, &data); err != nil {
 		return nil, fmt.Errorf("get PR %d: %w", number, err)
 	}
 
+	pr := data.Repository.PullRequest
+
 	var labels []string
-	for _, l := range pr.Labels {
-		labels = append(labels, l.GetName())
+	for _, l := range pr.Labels.Nodes {
+		labels = append(labels, l.Name)
 	}
 
-	data := &PRData{
-		Number:        pr.GetNumber(),
-		Title:         pr.GetTitle(),
-		Author:        pr.GetUser().GetLogin(),
-		State:         pr.GetState(),
+	author := ""
+	if pr.Author != nil {
+		author = pr.Author.Login
+	}
+
+	createdAt, _ := time.Parse(time.RFC3339, pr.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, pr.UpdatedAt)
+
+	result := &PRData{
+		Number:        pr.Number,
+		Title:         pr.Title,
+		Author:        author,
+		State:         strings.ToLower(pr.State),
 		Labels:        labels,
-		HeadSHA:       pr.GetHead().GetSHA(),
-		Additions:     pr.GetAdditions(),
-		Deletions:     pr.GetDeletions(),
-		CommentsCount: pr.GetComments() + pr.GetReviewComments(),
-		CreatedAt:     pr.GetCreatedAt().Time,
-		UpdatedAt:     pr.GetUpdatedAt().Time,
+		HeadSHA:       pr.HeadRefOid,
+		Additions:     pr.Additions,
+		Deletions:     pr.Deletions,
+		CommentsCount: pr.Comments.TotalCount + pr.Reviews.TotalCount,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
 	}
 
-	// Fetch diff
+	// Collect comments from issue comments and review comments.
+	var comments []Comment
+	for _, c := range pr.Comments.Nodes {
+		a := ""
+		if c.Author != nil {
+			a = c.Author.Login
+		}
+		t, _ := time.Parse(time.RFC3339, c.CreatedAt)
+		comments = append(comments, Comment{Author: a, Body: c.Body, CreatedAt: t})
+	}
+	for _, r := range pr.Reviews.Nodes {
+		// Include the review body itself if non-empty.
+		if r.Body != "" {
+			a := ""
+			if r.Author != nil {
+				a = r.Author.Login
+			}
+			t, _ := time.Parse(time.RFC3339, r.CreatedAt)
+			comments = append(comments, Comment{Author: a, Body: r.Body, CreatedAt: t})
+		}
+		// Include inline review comments.
+		for _, rc := range r.Comments.Nodes {
+			a := ""
+			if rc.Author != nil {
+				a = rc.Author.Login
+			}
+			t, _ := time.Parse(time.RFC3339, rc.CreatedAt)
+			comments = append(comments, Comment{Author: a, Body: rc.Body, CreatedAt: t})
+		}
+	}
+	result.Comments = comments
+
+	// Fetch diff via REST (not available in GraphQL).
 	diff, err := c.fetchDiff(ctx, number)
 	if err == nil {
-		data.Diff = diff
+		result.Diff = diff
 	}
 
-	// Fetch comments
-	comments, err := c.fetchComments(ctx, number)
-	if err == nil {
-		data.Comments = comments
-	}
-
-	return data, nil
+	return result, nil
 }
 
 func (c *Client) fetchDiff(ctx context.Context, number int) (string, error) {
-	raw, resp, err := c.gh.PullRequests.GetRaw(ctx, owner, repo, number, gh.RawOptions{Type: gh.Diff})
+	// Try authenticated REST API first.
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repo, number)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		// Fallback: try to get the diff via the diff URL
-		diffURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d.diff", owner, repo, number)
-		req, err2 := http.NewRequestWithContext(ctx, "GET", diffURL, nil)
-		if err2 != nil {
-			return "", fmt.Errorf("get diff: %w", err)
+		return "", fmt.Errorf("create diff request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github.v3.diff")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch diff: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("read diff: %w", err)
 		}
-		r, err2 := http.DefaultClient.Do(req)
-		if err2 != nil {
-			return "", fmt.Errorf("get diff: %w", err)
-		}
-		defer r.Body.Close()
-		b, _ := io.ReadAll(r.Body)
-		raw = string(b)
-	} else if resp != nil {
-		_ = resp.Body.Close()
+		return truncateDiff(string(b), c.maxDiffLines), nil
 	}
 
-	return truncateDiff(raw, c.maxDiffLines), nil
+	// Fallback: public diff URL.
+	diffURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d.diff", owner, repo, number)
+	req2, err := http.NewRequestWithContext(ctx, "GET", diffURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create fallback diff request: %w", err)
+	}
+	resp2, err := c.httpClient.Do(req2)
+	if err != nil {
+		return "", fmt.Errorf("fetch fallback diff: %w", err)
+	}
+	defer resp2.Body.Close()
+
+	b, _ := io.ReadAll(resp2.Body)
+	return truncateDiff(string(b), c.maxDiffLines), nil
 }
 
 func truncateDiff(diff string, maxLines int) string {
@@ -143,45 +215,4 @@ func truncateDiff(diff string, maxLines int) string {
 	}
 	truncated := strings.Join(lines[:maxLines], "\n")
 	return truncated + fmt.Sprintf("\n\n... [truncated: %d/%d lines shown]", maxLines, len(lines))
-}
-
-func (c *Client) fetchComments(ctx context.Context, number int) ([]Comment, error) {
-	// Get issue comments (general discussion)
-	issueComments, _, err := c.gh.Issues.ListComments(ctx, owner, repo, number, &gh.IssueListCommentsOptions{
-		Sort:      gh.String("created"),
-		Direction: gh.String("desc"),
-		ListOptions: gh.ListOptions{PerPage: 20},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var comments []Comment
-	for _, c := range issueComments {
-		comments = append(comments, Comment{
-			Author:    c.GetUser().GetLogin(),
-			Body:      c.GetBody(),
-			CreatedAt: c.GetCreatedAt().Time,
-		})
-	}
-
-	// Get review comments (inline code comments)
-	reviewComments, _, err := c.gh.PullRequests.ListComments(ctx, owner, repo, number, &gh.PullRequestListCommentsOptions{
-		Sort:      "created",
-		Direction: "desc",
-		ListOptions: gh.ListOptions{PerPage: 20},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	for _, c := range reviewComments {
-		comments = append(comments, Comment{
-			Author:    c.GetUser().GetLogin(),
-			Body:      c.GetBody(),
-			CreatedAt: c.GetCreatedAt().Time,
-		})
-	}
-
-	return comments, nil
 }
