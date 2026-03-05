@@ -14,7 +14,7 @@ import (
 	"github.com/sina-geth/geth-triage/internal/github"
 )
 
-const claudeCodePromptVersion = "cc-v3"
+const ClaudeCodePromptVersion = "cc-v3"
 
 const claudeCodeSystemPrompt = `You are an expert Go/Ethereum developer and open-source maintainer helping triage pull requests for the go-ethereum (geth) repository.
 
@@ -311,7 +311,7 @@ func (c *ClaudeCodeAnalyzer) parseOutput(raw []byte) (*AnalysisResult, error) {
 		Explanation:   result.Explanation,
 		RelatedPRs:    result.RelatedPRs,
 		Model:         "claude-code:" + c.model,
-		PromptVersion: claudeCodePromptVersion,
+		PromptVersion: ClaudeCodePromptVersion,
 		InputTokens:   inputTokens,
 		OutputTokens:  outputTokens,
 	}, nil

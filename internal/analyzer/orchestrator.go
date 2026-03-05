@@ -24,6 +24,45 @@ func NewOrchestrator(a PRAnalyzer, s *store.Store, log zerolog.Logger, opts ...O
 	return o
 }
 
+// AnalyzePending queries the DB for PRs that still need analysis and analyzes them.
+// This is used on startup to resume work interrupted by usage throttling or restarts.
+func (o *Orchestrator) AnalyzePending(ctx context.Context) error {
+	if o.promptVersion == "" {
+		return nil
+	}
+	pending, err := o.store.PRsNeedingAnalysis(ctx, o.promptVersion)
+	if err != nil {
+		return fmt.Errorf("query pending PRs: %w", err)
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	o.log.Info().Int("count", len(pending)).Msg("resuming analysis of pending PRs")
+
+	var prs []github.PRData
+	for _, pr := range pending {
+		prs = append(prs, storePRToData(pr))
+	}
+	return o.analyzeSequential(ctx, prs)
+}
+
+func storePRToData(pr store.PullRequest) github.PRData {
+	var labels []string
+	_ = json.Unmarshal(pr.Labels, &labels)
+	return github.PRData{
+		Number:        pr.Number,
+		Title:         pr.Title,
+		Author:        pr.Author,
+		Labels:        labels,
+		HeadSHA:       pr.HeadSHA,
+		Additions:     pr.Additions,
+		Deletions:     pr.Deletions,
+		CommentsCount: pr.CommentsCount,
+		CreatedAt:     pr.CreatedAt,
+		UpdatedAt:     pr.UpdatedAt,
+	}
+}
+
 // Analyze routes PRs to batch or single analysis based on configuration.
 func (o *Orchestrator) Analyze(ctx context.Context, prs []github.PRData) error {
 	if len(prs) == 0 {

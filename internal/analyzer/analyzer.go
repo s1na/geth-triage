@@ -50,6 +50,7 @@ type Orchestrator struct {
 	batchThreshold int
 	usageChecker   UsageChecker
 	usageThreshold float64
+	promptVersion  string
 }
 
 // BatchAnalyzer is an optional interface for analyzers that support async batch processing.
@@ -78,6 +79,13 @@ func WithBatchAnalyzer(ba BatchAnalyzer, threshold int) OrchestratorOption {
 	return func(o *Orchestrator) {
 		o.batchAnalyzer = ba
 		o.batchThreshold = threshold
+	}
+}
+
+// WithPromptVersion sets the current prompt version for pending PR detection.
+func WithPromptVersion(v string) OrchestratorOption {
+	return func(o *Orchestrator) {
+		o.promptVersion = v
 	}
 }
 

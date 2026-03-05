@@ -59,7 +59,7 @@ func main() {
 			log.Fatal().Err(err).Msg("failed to ensure geth repo")
 		}
 		prAnalyzer = ccAnalyzer
-		// No batch support for claude code
+		opts = append(opts, analyzer.WithPromptVersion(analyzer.ClaudeCodePromptVersion))
 	case "api":
 		if cfg.AnthropicAPIKey == "" {
 			log.Fatal().Msg("ANTHROPIC_API_KEY is required when ANALYZER_TYPE=api")
@@ -68,6 +68,7 @@ func main() {
 		prAnalyzer = analyzer.NewAPIAnalyzer(ac)
 		batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
 		opts = append(opts, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
+		opts = append(opts, analyzer.WithPromptVersion(anthropic.PromptVersion))
 	default:
 		log.Fatal().Str("type", cfg.AnalyzerType).Msg("unknown ANALYZER_TYPE")
 	}
@@ -137,8 +138,14 @@ func main() {
 		return httpSrv.Shutdown(shutdownCtx)
 	})
 
-	// Check if poll is overdue on startup
+	// On startup: resume pending analysis, then poll if overdue
 	g.Go(func() error {
+		// First, analyze any PRs left over from a previous interrupted run
+		if err := az.AnalyzePending(ctx); err != nil {
+			log.Error().Err(err).Msg("failed to analyze pending PRs")
+		}
+
+		// Then check if a fresh poll is needed
 		lastPollStr, _ := db.GetState(ctx, "last_poll_time")
 		shouldPollNow := true
 		if lastPollStr != "" {
