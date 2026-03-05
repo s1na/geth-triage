@@ -72,16 +72,20 @@ func main() {
 		return
 	}
 
-	// Step 2: Fetch details (diffs, comments) for PRs needing analysis
-	log.Info().Int("count", len(changed)).Msg("fetching PR details...")
-	detailed, err := poller.FetchDetails(ctx, changed)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to fetch PR details")
+	// Step 2: Fetch details for non-Claude Code analyzers (Claude Code uses gh CLI)
+	toAnalyze := changed
+	if cfg.AnalyzerType != "claudecode" {
+		log.Info().Int("count", len(changed)).Msg("fetching PR details...")
+		detailed, err := poller.FetchDetails(ctx, changed)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to fetch PR details")
+		}
+		toAnalyze = detailed
 	}
 
 	// Step 3: Analyze
-	log.Info().Int("count", len(detailed)).Msg("starting analysis...")
-	if err := az.Analyze(ctx, detailed); err != nil {
+	log.Info().Int("count", len(toAnalyze)).Msg("starting analysis...")
+	if err := az.Analyze(ctx, toAnalyze); err != nil {
 		log.Fatal().Err(err).Msg("failed to analyze PRs")
 	}
 

@@ -203,13 +203,19 @@ func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orc
 		return
 	}
 
-	detailed, err := poller.FetchDetails(ctx, changed)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to fetch PR details")
-		return
+	// Claude Code analyzer fetches diff/comments itself via gh CLI,
+	// so we only need to fetch details for other analyzer types.
+	toAnalyze := changed
+	if repoMgr == nil {
+		detailed, err := poller.FetchDetails(ctx, changed)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to fetch PR details")
+			return
+		}
+		toAnalyze = detailed
 	}
 
-	if err := az.Analyze(ctx, detailed); err != nil {
+	if err := az.Analyze(ctx, toAnalyze); err != nil {
 		log.Error().Err(err).Msg("analysis failed")
 	}
 }

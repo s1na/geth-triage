@@ -149,7 +149,7 @@ func (c *ClaudeCodeAnalyzer) AnalyzePR(ctx context.Context, pr github.PRData) (*
 		"--system-prompt", claudeCodeSystemPrompt,
 		"--model", c.model,
 		"--max-budget-usd", c.maxBudget,
-		"--allowedTools", "Read Glob Grep Bash(git log:*) Bash(git blame:*) Bash(git show:*) WebSearch WebFetch",
+		"--allowedTools", "Read Glob Grep Bash(git log:*) Bash(git blame:*) Bash(git show:*) Bash(gh:*) WebSearch WebFetch",
 		"--no-session-persistence",
 		"--dangerously-skip-permissions",
 	}
@@ -278,28 +278,12 @@ func buildClaudeCodeUserPrompt(pr github.PRData) string {
 	sb.WriteString(fmt.Sprintf("**Comments:** %d\n", pr.CommentsCount))
 	sb.WriteString(fmt.Sprintf("**Created:** %s | **Updated:** %s\n\n", pr.CreatedAt.Format("2006-01-02"), pr.UpdatedAt.Format("2006-01-02")))
 
-	if len(pr.Comments) > 0 {
-		sb.WriteString("### Recent Comments\n\n")
-		limit := 10
-		if len(pr.Comments) < limit {
-			limit = len(pr.Comments)
-		}
-		for _, c := range pr.Comments[:limit] {
-			body := c.Body
-			if len(body) > 500 {
-				body = body[:500] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("**%s** (%s):\n%s\n\n", c.Author, c.CreatedAt.Format("2006-01-02"), body))
-		}
+	sb.WriteString("Start by fetching the PR diff and comments using the gh CLI:\n")
+	sb.WriteString(fmt.Sprintf("- `gh pr diff %d --repo ethereum/go-ethereum`\n", pr.Number))
+	if pr.CommentsCount > 0 {
+		sb.WriteString(fmt.Sprintf("- `gh pr view %d --repo ethereum/go-ethereum --json comments,reviews`\n", pr.Number))
 	}
-
-	if pr.Diff != "" {
-		sb.WriteString("### Diff\n\n```diff\n")
-		sb.WriteString(pr.Diff)
-		sb.WriteString("\n```\n")
-	}
-
-	sb.WriteString("\nExplore the codebase to understand the context of the changes before categorizing this PR. Read modified files, grep for usages, and check related code paths.")
+	sb.WriteString("\nThen explore the codebase to understand the context of the changes. Read modified files, grep for usages, and check related code paths.")
 
 	return sb.String()
 }
