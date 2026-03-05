@@ -36,7 +36,9 @@ func main() {
 	gh := ghclient.NewClient(cfg.GithubToken, cfg.MaxDiffLines)
 	ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
 	poller := ghclient.NewPoller(gh, db, log)
-	az := analyzer.New(ac, db, cfg.BatchThreshold, log)
+	prAnalyzer := analyzer.NewAPIAnalyzer(ac)
+	batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
+	az := analyzer.NewOrchestrator(prAnalyzer, db, log, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
 
 	// Step 1: Fetch all open PRs
 	log.Info().Msg("fetching all open PRs from GitHub...")

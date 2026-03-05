@@ -14,12 +14,12 @@ import (
 
 type Handlers struct {
 	store    *store.Store
-	analyzer *analyzer.Analyzer
+	analyzer *analyzer.Orchestrator
 	github   *ghclient.Client
 	log      zerolog.Logger
 }
 
-func NewHandlers(s *store.Store, az *analyzer.Analyzer, gh *ghclient.Client, log zerolog.Logger) *Handlers {
+func NewHandlers(s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, log zerolog.Logger) *Handlers {
 	return &Handlers{store: s, analyzer: az, github: gh, log: log}
 }
 

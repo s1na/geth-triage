@@ -48,7 +48,9 @@ func main() {
 	gh := ghclient.NewClient(cfg.GithubToken, cfg.MaxDiffLines)
 	ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
 	poller := ghclient.NewPoller(gh, db, log)
-	az := analyzer.New(ac, db, cfg.BatchThreshold, log)
+	prAnalyzer := analyzer.NewAPIAnalyzer(ac)
+	batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
+	az := analyzer.NewOrchestrator(prAnalyzer, db, log, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
 
 	// Init HTTP server
 	handler := api.NewServer(cfg.APIKey, db, az, gh, log)
@@ -157,7 +159,7 @@ func main() {
 	}
 }
 
-func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Analyzer, log zerolog.Logger) {
+func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, log zerolog.Logger) {
 	log.Info().Msg("starting poll cycle")
 	changed, err := poller.Poll(ctx)
 	if err != nil {

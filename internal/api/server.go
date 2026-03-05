@@ -9,7 +9,7 @@ import (
 	"github.com/sina-geth/geth-triage/internal/store"
 )
 
-func NewServer(apiKey string, s *store.Store, az *analyzer.Analyzer, gh *ghclient.Client, log zerolog.Logger) http.Handler {
+func NewServer(apiKey string, s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, log zerolog.Logger) http.Handler {
 	h := NewHandlers(s, az, gh, log)
 
 	mux := http.NewServeMux()
