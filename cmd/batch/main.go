@@ -34,11 +34,31 @@ func main() {
 
 	// Init clients
 	gh := ghclient.NewClient(cfg.GithubToken, cfg.MaxDiffLines)
-	ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
 	poller := ghclient.NewPoller(gh, db, log)
-	prAnalyzer := analyzer.NewAPIAnalyzer(ac)
-	batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
-	az := analyzer.NewOrchestrator(prAnalyzer, db, log, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
+
+	var prAnalyzer analyzer.PRAnalyzer
+	var opts []analyzer.OrchestratorOption
+
+	switch cfg.AnalyzerType {
+	case "claudecode":
+		ccAnalyzer := analyzer.NewClaudeCodeAnalyzer(cfg.GethRepoPath, cfg.ClaudeCodeModel, cfg.ClaudeCodeMaxBudget, cfg.ClaudeCodeTimeout, log)
+		if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
+			log.Fatal().Err(err).Msg("failed to ensure geth repo")
+		}
+		prAnalyzer = ccAnalyzer
+	case "api":
+		if cfg.AnthropicAPIKey == "" {
+			log.Fatal().Msg("ANTHROPIC_API_KEY is required when ANALYZER_TYPE=api")
+		}
+		ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
+		prAnalyzer = analyzer.NewAPIAnalyzer(ac)
+		batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
+		opts = append(opts, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
+	default:
+		log.Fatal().Str("type", cfg.AnalyzerType).Msg("unknown ANALYZER_TYPE")
+	}
+
+	az := analyzer.NewOrchestrator(prAnalyzer, db, log, opts...)
 
 	// Step 1: Fetch all open PRs
 	log.Info().Msg("fetching all open PRs from GitHub...")

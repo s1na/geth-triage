@@ -51,6 +51,11 @@ type BatchAnalyzer interface {
 	CollectBatchResults(ctx context.Context, batchID string) (map[string]*AnalysisResult, error)
 }
 
+// RepoManager is an optional interface for analyzers that need repo preparation before analysis cycles.
+type RepoManager interface {
+	EnsureRepo(ctx context.Context) error
+}
+
 // OrchestratorOption configures the Orchestrator.
 type OrchestratorOption func(*Orchestrator)
 

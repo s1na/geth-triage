@@ -46,11 +46,38 @@ func main() {
 
 	// Init clients
 	gh := ghclient.NewClient(cfg.GithubToken, cfg.MaxDiffLines)
-	ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
 	poller := ghclient.NewPoller(gh, db, log)
-	prAnalyzer := analyzer.NewAPIAnalyzer(ac)
-	batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
-	az := analyzer.NewOrchestrator(prAnalyzer, db, log, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
+
+	var prAnalyzer analyzer.PRAnalyzer
+	var opts []analyzer.OrchestratorOption
+
+	switch cfg.AnalyzerType {
+	case "claudecode":
+		ccAnalyzer := analyzer.NewClaudeCodeAnalyzer(cfg.GethRepoPath, cfg.ClaudeCodeModel, cfg.ClaudeCodeMaxBudget, cfg.ClaudeCodeTimeout, log)
+		if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
+			log.Fatal().Err(err).Msg("failed to ensure geth repo")
+		}
+		prAnalyzer = ccAnalyzer
+		// No batch support for claude code
+	case "api":
+		if cfg.AnthropicAPIKey == "" {
+			log.Fatal().Msg("ANTHROPIC_API_KEY is required when ANALYZER_TYPE=api")
+		}
+		ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
+		prAnalyzer = analyzer.NewAPIAnalyzer(ac)
+		batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
+		opts = append(opts, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
+	default:
+		log.Fatal().Str("type", cfg.AnalyzerType).Msg("unknown ANALYZER_TYPE")
+	}
+
+	az := analyzer.NewOrchestrator(prAnalyzer, db, log, opts...)
+
+	// Check if analyzer supports repo management (for pre-cycle updates)
+	var repoMgr analyzer.RepoManager
+	if rm, ok := prAnalyzer.(analyzer.RepoManager); ok {
+		repoMgr = rm
+	}
 
 	// Init HTTP server
 	handler := api.NewServer(cfg.APIKey, db, az, gh, log)
@@ -114,7 +141,7 @@ func main() {
 			}
 		}
 		if shouldPollNow {
-			runPollCycle(ctx, poller, az, log)
+			runPollCycle(ctx, poller, az, repoMgr, log)
 		}
 		return nil
 	})
@@ -128,7 +155,7 @@ func main() {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				runPollCycle(ctx, poller, az, log)
+				runPollCycle(ctx, poller, az, repoMgr, log)
 			}
 		}
 	})
@@ -159,7 +186,12 @@ func main() {
 	}
 }
 
-func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, log zerolog.Logger) {
+func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, repoMgr analyzer.RepoManager, log zerolog.Logger) {
+	if repoMgr != nil {
+		if err := repoMgr.EnsureRepo(ctx); err != nil {
+			log.Warn().Err(err).Msg("failed to update repo before poll cycle")
+		}
+	}
 	log.Info().Msg("starting poll cycle")
 	changed, err := poller.Poll(ctx)
 	if err != nil {

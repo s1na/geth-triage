@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog"
+	"github.com/sina-geth/geth-triage/internal/analyzer"
 	"github.com/sina-geth/geth-triage/internal/anthropic"
 	"github.com/sina-geth/geth-triage/internal/config"
 	ghclient "github.com/sina-geth/geth-triage/internal/github"
@@ -32,7 +33,25 @@ func main() {
 	defer cancel()
 
 	gh := ghclient.NewClient(cfg.GithubToken, cfg.MaxDiffLines)
-	ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
+
+	var prAnalyzer analyzer.PRAnalyzer
+
+	switch cfg.AnalyzerType {
+	case "claudecode":
+		ccAnalyzer := analyzer.NewClaudeCodeAnalyzer(cfg.GethRepoPath, cfg.ClaudeCodeModel, cfg.ClaudeCodeMaxBudget, cfg.ClaudeCodeTimeout, log)
+		if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
+			log.Fatal().Err(err).Msg("failed to ensure geth repo")
+		}
+		prAnalyzer = ccAnalyzer
+	case "api":
+		if cfg.AnthropicAPIKey == "" {
+			log.Fatal().Msg("ANTHROPIC_API_KEY is required when ANALYZER_TYPE=api")
+		}
+		ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
+		prAnalyzer = analyzer.NewAPIAnalyzer(ac)
+	default:
+		log.Fatal().Str("type", cfg.AnalyzerType).Msg("unknown ANALYZER_TYPE")
+	}
 
 	for _, arg := range os.Args[1:] {
 		num, err := strconv.Atoi(arg)
@@ -55,9 +74,9 @@ func main() {
 			Int("deletions", pr.Deletions).
 			Int("comments", len(pr.Comments)).
 			Int("diff_len", len(pr.Diff)).
-			Msg("fetched PR, sending to Claude...")
+			Msg("fetched PR, sending to analyzer...")
 
-		result, inputTok, outputTok, err := ac.AnalyzePR(ctx, *pr)
+		result, err := prAnalyzer.AnalyzePR(ctx, *pr)
 		if err != nil {
 			log.Error().Err(err).Int("pr", num).Msg("analysis failed")
 			continue
@@ -66,7 +85,7 @@ func main() {
 		out, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Printf("\n=== PR #%d: %s ===\n", num, pr.Title)
 		fmt.Printf("Author: %s | +%d/-%d | %d comments\n", pr.Author, pr.Additions, pr.Deletions, pr.CommentsCount)
-		fmt.Printf("Tokens: %d in / %d out\n\n", inputTok, outputTok)
+		fmt.Printf("Model: %s | Tokens: %d in / %d out\n\n", result.Model, result.InputTokens, result.OutputTokens)
 		fmt.Println(string(out))
 		fmt.Println()
 	}

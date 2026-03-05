@@ -7,6 +7,7 @@ test-pr
 # Data
 data/
 *.db
+go-ethereum/
 
 # Environment
 .env
