@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/sina-geth/geth-triage/internal/github"
@@ -28,9 +29,15 @@ type AnalysisResult struct {
 	OutputTokens  int     `json:"output_tokens"`
 }
 
-// UsageChecker checks current API usage. Returns utilization (0-100) and error.
+// UsageStatus is returned by UsageChecker with current utilization and reset time.
+type UsageStatus struct {
+	Utilization float64
+	ResetsAt    time.Time
+}
+
+// UsageChecker checks current API usage.
 type UsageChecker interface {
-	CheckUsage(ctx context.Context) (float64, error)
+	CheckUsage(ctx context.Context) (*UsageStatus, error)
 }
 
 // Orchestrator manages analysis scheduling, batching, and persistence.

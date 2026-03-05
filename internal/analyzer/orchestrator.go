@@ -59,8 +59,8 @@ func (o *Orchestrator) analyzeSequential(ctx context.Context, prs []github.PRDat
 	o.log.Info().Int("count", len(prs)).Msg("analyzing PRs sequentially")
 
 	for i, pr := range prs {
-		if err := o.checkUsageThreshold(ctx); err != nil {
-			o.log.Warn().Err(err).Int("remaining", len(prs)-i).Msg("pausing analysis due to usage threshold")
+		if err := o.waitForUsage(ctx); err != nil {
+			o.log.Warn().Err(err).Int("remaining", len(prs)-i).Msg("aborting analysis")
 			return nil
 		}
 
@@ -74,20 +74,39 @@ func (o *Orchestrator) analyzeSequential(ctx context.Context, prs []github.PRDat
 	return nil
 }
 
-func (o *Orchestrator) checkUsageThreshold(ctx context.Context) error {
+// waitForUsage checks usage and blocks until utilization drops below threshold.
+// Returns error only if the context is cancelled.
+func (o *Orchestrator) waitForUsage(ctx context.Context) error {
 	if o.usageChecker == nil || o.usageThreshold <= 0 {
 		return nil
 	}
-	utilization, err := o.usageChecker.CheckUsage(ctx)
-	if err != nil {
-		o.log.Warn().Err(err).Msg("failed to check usage, continuing anyway")
-		return nil
+	for {
+		status, err := o.usageChecker.CheckUsage(ctx)
+		if err != nil {
+			o.log.Warn().Err(err).Msg("failed to check usage, continuing anyway")
+			return nil
+		}
+		o.log.Info().Float64("utilization", status.Utilization).Float64("threshold", o.usageThreshold).Msg("usage check")
+		if status.Utilization < o.usageThreshold {
+			return nil
+		}
+
+		waitDur := time.Until(status.ResetsAt)
+		if waitDur <= 0 {
+			waitDur = 5 * time.Minute
+		}
+		o.log.Warn().
+			Float64("utilization", status.Utilization).
+			Time("resets_at", status.ResetsAt).
+			Dur("wait", waitDur).
+			Msg("usage threshold exceeded, waiting for reset")
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitDur):
+		}
 	}
-	o.log.Info().Float64("utilization", utilization).Float64("threshold", o.usageThreshold).Msg("usage check")
-	if utilization >= o.usageThreshold {
-		return fmt.Errorf("usage at %.0f%% (threshold %.0f%%)", utilization, o.usageThreshold)
-	}
-	return nil
 }
 
 func (o *Orchestrator) analyzeBatch(ctx context.Context, prs []github.PRData) error {

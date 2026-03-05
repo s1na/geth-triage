@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sina-geth/geth-triage/internal/analyzer"
 )
 
 const usageEndpoint = "https://api.anthropic.com/api/oauth/usage"
@@ -23,16 +25,16 @@ func NewUsageChecker() *UsageChecker {
 	}
 }
 
-// CheckUsage returns the 5-hour window utilization (0-100).
-func (u *UsageChecker) CheckUsage(ctx context.Context) (float64, error) {
+// CheckUsage returns the 5-hour window utilization and reset time.
+func (u *UsageChecker) CheckUsage(ctx context.Context) (*analyzer.UsageStatus, error) {
 	token, err := readOAuthToken()
 	if err != nil {
-		return 0, fmt.Errorf("read oauth token: %w", err)
+		return nil, fmt.Errorf("read oauth token: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", usageEndpoint, nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
@@ -40,23 +42,27 @@ func (u *UsageChecker) CheckUsage(ctx context.Context) (float64, error) {
 
 	resp, err := u.httpClient.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("usage request: %w", err)
+		return nil, fmt.Errorf("usage request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("usage API returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("usage API returned %d", resp.StatusCode)
 	}
 
 	var data usageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return 0, fmt.Errorf("decode usage: %w", err)
+		return nil, fmt.Errorf("decode usage: %w", err)
 	}
 
-	if data.FiveHour == nil {
-		return 0, nil
+	status := &analyzer.UsageStatus{}
+	if data.FiveHour != nil {
+		status.Utilization = data.FiveHour.Utilization
+		if data.FiveHour.ResetsAt != "" {
+			status.ResetsAt, _ = time.Parse(time.RFC3339, data.FiveHour.ResetsAt)
+		}
 	}
-	return data.FiveHour.Utilization, nil
+	return status, nil
 }
 
 type usageResponse struct {
