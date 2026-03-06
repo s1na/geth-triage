@@ -63,6 +63,11 @@ func main() {
 
 	az := analyzer.NewOrchestrator(ccAnalyzer, db, log, opts...)
 
+	log.Info().
+		Dur("metadata_poll_interval", cfg.MetadataPollInterval).
+		Dur("analysis_interval", cfg.AnalysisInterval).
+		Msg("polling intervals configured")
+
 	// Init HTTP server
 	handler := api.NewServer(cfg.APIKey, db, az, gh, log)
 	srv := &http.Server{
@@ -114,24 +119,24 @@ func main() {
 		return httpSrv.Shutdown(shutdownCtx)
 	})
 
-	// Analysis worker — single goroutine processes the queue sequentially
+	// Analysis worker — single goroutine that drains the queue sequentially.
+	// Checks usage before each item and backs off if over threshold.
 	g.Go(func() error {
 		az.Run(ctx)
 		return nil
 	})
 
-	// On startup: sync metadata if overdue, then enqueue pending analysis
+	// Startup: sync metadata if stale, then seed the queue with pending work.
 	g.Go(func() error {
 		lastPollStr, _ := db.GetState(ctx, "last_poll_time")
-		shouldPollNow := true
+		pollOverdue := true
 		if lastPollStr != "" {
-			lastPoll, err := time.Parse(time.RFC3339, lastPollStr)
-			if err == nil && time.Since(lastPoll) < cfg.MetadataPollInterval {
-				shouldPollNow = false
+			if lastPoll, err := time.Parse(time.RFC3339, lastPollStr); err == nil {
+				pollOverdue = time.Since(lastPoll) >= cfg.MetadataPollInterval
 			}
 		}
-		if shouldPollNow {
-			runMetadataSync(ctx, poller, log)
+		if pollOverdue {
+			runMetadataSync(ctx, poller, az, log)
 		}
 		if err := az.AnalyzePending(ctx); err != nil {
 			log.Error().Err(err).Msg("failed to enqueue pending PRs")
@@ -139,7 +144,8 @@ func main() {
 		return nil
 	})
 
-	// Fast metadata sync loop — keeps PR state (open/closed) fresh
+	// Metadata sync loop (fast) — fetches PR list from GitHub, updates
+	// open/closed state, and immediately enqueues brand-new PRs for analysis.
 	g.Go(func() error {
 		ticker := time.NewTicker(cfg.MetadataPollInterval)
 		defer ticker.Stop()
@@ -148,14 +154,15 @@ func main() {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				runMetadataSync(ctx, poller, log)
+				runMetadataSync(ctx, poller, az, log)
 			}
 		}
 	})
 
-	// Slow analysis loop — enqueues PRs whose HEAD SHA changed since last analysis
+	// Analysis sweep loop (slow) — enqueues PRs that need (re-)analysis:
+	// new PRs missed by metadata sync, SHA changes, or prompt version bumps.
 	g.Go(func() error {
-		ticker := time.NewTicker(cfg.PollInterval)
+		ticker := time.NewTicker(cfg.AnalysisInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -163,9 +170,9 @@ func main() {
 				return nil
 			case <-ticker.C:
 				if err := az.AnalyzePending(ctx); err != nil {
-					log.Error().Err(err).Msg("analysis check failed")
+					log.Error().Err(err).Msg("analysis sweep failed")
 				} else {
-					log.Info().Msg("analysis check complete")
+					log.Info().Msg("analysis sweep complete")
 				}
 			}
 		}
@@ -176,9 +183,15 @@ func main() {
 	}
 }
 
-func runMetadataSync(ctx context.Context, poller *ghclient.Poller, log zerolog.Logger) {
+func runMetadataSync(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, log zerolog.Logger) {
 	log.Info().Msg("syncing PR metadata from GitHub")
-	if _, err := poller.Poll(ctx); err != nil {
+	result, err := poller.Poll(ctx)
+	if err != nil {
 		log.Error().Err(err).Msg("metadata sync failed")
+		return
+	}
+	if len(result.NewPRs) > 0 {
+		az.Enqueue(result.NewPRs...)
+		log.Info().Int("count", len(result.NewPRs)).Msg("enqueued new PRs for analysis")
 	}
 }

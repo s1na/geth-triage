@@ -19,9 +19,13 @@ func NewPoller(client *Client, store *store.Store, log zerolog.Logger) *Poller {
 	return &Poller{client: client, store: store, log: log}
 }
 
+// PollResult contains the results of a metadata sync.
+type PollResult struct {
+	NewPRs []PRData // PRs not previously in the store
+}
+
 // Poll fetches all open PRs and upserts them into the store.
-// Returns PRs that need analysis (new or changed).
-func (p *Poller) Poll(ctx context.Context) ([]PRData, error) {
+func (p *Poller) Poll(ctx context.Context) (*PollResult, error) {
 	p.log.Info().Msg("polling GitHub for open PRs")
 	start := time.Now()
 
@@ -31,7 +35,7 @@ func (p *Poller) Poll(ctx context.Context) ([]PRData, error) {
 	}
 	p.log.Info().Int("count", len(prs)).Dur("duration", time.Since(start)).Msg("fetched open PRs")
 
-	var changed []PRData
+	result := &PollResult{}
 	for _, pr := range prs {
 		existing, err := p.store.GetPR(ctx, pr.Number)
 		if err != nil {
@@ -59,11 +63,8 @@ func (p *Poller) Poll(ctx context.Context) ([]PRData, error) {
 			continue
 		}
 
-		// Determine if this PR is new or changed
-		isNew := existing == nil
-		shaChanged := existing != nil && existing.HeadSHA != pr.HeadSHA
-		if isNew || shaChanged {
-			changed = append(changed, pr)
+		if existing == nil {
+			result.NewPRs = append(result.NewPRs, pr)
 		}
 	}
 
@@ -84,6 +85,6 @@ func (p *Poller) Poll(ctx context.Context) ([]PRData, error) {
 		p.log.Error().Err(err).Msg("failed to set last poll time")
 	}
 
-	p.log.Info().Int("total", len(prs)).Int("changed", len(changed)).Msg("poll complete")
-	return changed, nil
+	p.log.Info().Int("total", len(prs)).Int("new", len(result.NewPRs)).Msg("poll complete")
+	return result, nil
 }

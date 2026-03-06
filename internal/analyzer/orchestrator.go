@@ -126,8 +126,8 @@ func (o *Orchestrator) Run(ctx context.Context) {
 	}
 }
 
-// AnalyzePending enqueues PRs from the database that still need analysis.
-// Called on startup to resume work interrupted by usage throttling or restarts.
+// AnalyzePending enqueues PRs from the database that still need analysis
+// (never analyzed, HEAD SHA changed, or prompt version bumped).
 func (o *Orchestrator) AnalyzePending(ctx context.Context) error {
 	pending, err := o.store.PRsNeedingAnalysis(ctx, ClaudeCodePromptVersion)
 	if err != nil {
