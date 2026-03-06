@@ -11,7 +11,7 @@ type Config struct {
 	GithubToken       string        `env:"GITHUB_TOKEN,required"`
 	AnthropicAPIKey   string        `env:"ANTHROPIC_API_KEY"`
 	APIKey            string        `env:"API_KEY,required"`
-	PollInterval      time.Duration `env:"POLL_INTERVAL" envDefault:"4h"`
+	PollInterval      time.Duration `env:"POLL_INTERVAL" envDefault:"1h"`
 	BatchPollInterval time.Duration `env:"BATCH_POLL_INTERVAL" envDefault:"5m"`
 	ListenAddr        string        `env:"LISTEN_ADDR" envDefault:":8443"`
 	HTTPListenAddr    string        `env:"HTTP_LISTEN_ADDR" envDefault:":8080"`

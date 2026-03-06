@@ -13,14 +13,15 @@ import (
 )
 
 type Handlers struct {
-	store    *store.Store
-	analyzer *analyzer.Orchestrator
-	github   *ghclient.Client
-	log      zerolog.Logger
+	store        *store.Store
+	analyzer     *analyzer.Orchestrator
+	github       *ghclient.Client
+	log          zerolog.Logger
+	pollInterval time.Duration
 }
 
-func NewHandlers(s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, log zerolog.Logger) *Handlers {
-	return &Handlers{store: s, analyzer: az, github: gh, log: log}
+func NewHandlers(s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, pollInterval time.Duration, log zerolog.Logger) *Handlers {
+	return &Handlers{store: s, analyzer: az, github: gh, pollInterval: pollInterval, log: log}
 }
 
 func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +148,7 @@ func (h *Handlers) AnalyzePR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Stats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.store.GetStats(r.Context())
+	stats, err := h.store.GetStats(r.Context(), h.pollInterval)
 	if err != nil {
 		h.log.Error().Err(err).Msg("failed to get stats")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})

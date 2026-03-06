@@ -88,7 +88,7 @@ func main() {
 	}
 
 	// Init HTTP server
-	handler := api.NewServer(cfg.APIKey, db, az, gh, log)
+	handler := api.NewServer(cfg.APIKey, db, az, gh, cfg.PollInterval, log)
 	srv := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: handler,
@@ -201,11 +201,6 @@ func main() {
 }
 
 func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, repoMgr analyzer.RepoManager, log zerolog.Logger) {
-	if repoMgr != nil {
-		if err := repoMgr.EnsureRepo(ctx); err != nil {
-			log.Warn().Err(err).Msg("failed to update repo before poll cycle")
-		}
-	}
 	log.Info().Msg("starting poll cycle")
 	changed, err := poller.Poll(ctx)
 	if err != nil {
@@ -215,6 +210,13 @@ func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orc
 	if len(changed) == 0 {
 		log.Info().Msg("no PRs need analysis")
 		return
+	}
+
+	// Update repo only when there's work to do
+	if repoMgr != nil {
+		if err := repoMgr.EnsureRepo(ctx); err != nil {
+			log.Warn().Err(err).Msg("failed to update repo before analysis")
+		}
 	}
 
 	// Claude Code analyzer fetches diff/comments itself via gh CLI,
