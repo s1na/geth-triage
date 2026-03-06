@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/github"
 )
 
 const ClaudeCodePromptVersion = "cc-v3"

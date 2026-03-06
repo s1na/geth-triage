@@ -10,10 +10,10 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/analyzer"
-	"github.com/sina-geth/geth-triage/internal/anthropic"
-	"github.com/sina-geth/geth-triage/internal/config"
-	ghclient "github.com/sina-geth/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/analyzer"
+	"github.com/s1na/geth-triage/internal/anthropic"
+	"github.com/s1na/geth-triage/internal/config"
+	ghclient "github.com/s1na/geth-triage/internal/github"
 )
 
 func main() {

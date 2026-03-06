@@ -1,4 +1,4 @@
-module github.com/sina-geth/geth-triage
+module github.com/s1na/geth-triage
 
 go 1.25.5
 

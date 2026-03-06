@@ -7,9 +7,9 @@ AI-powered PR triage service for [ethereum/go-ethereum](https://github.com/ether
 | Category | Description |
 |----------|-------------|
 | **closeable** | Spam, AI-generated slop, broken, abandoned, cosmetic-only |
-| **high-priority** | Security fixes, consensus-critical changes, known contributors |
+| **high-priority** | Security fixes, critical bugs, known contributors/maintainers |
 | **duplicate** | Overlaps with another open PR |
-| **needs-attention** | Meaningful changes that need review but aren't urgent |
+| **mergeable** | Reviewed/approved by maintainers but not yet merged |
 | **normal** | Minor improvements, WIP, unclear scope |
 
 ## Quick Start
@@ -19,8 +19,7 @@ cp .env.example .env
 # Fill in GITHUB_TOKEN, ANTHROPIC_API_KEY, and API_KEY
 
 # Test on a specific PR
-go build -o test-pr ./cmd/test
-./test-pr 33702
+go run ./cmd/test 33702
 
 # Run the service
 go build -o geth-triage .
@@ -29,8 +28,11 @@ go build -o geth-triage .
 
 ## Architecture
 
-- **GitHub poller** — fetches open PRs every 4 hours, detects new/changed PRs, marks closed PRs
-- **Anthropic analyzer** — Batch API for bulk (>10 PRs), Messages API for individual analysis
+- **GitHub poller** — fetches open PRs via GraphQL every hour, detects new/changed PRs
+- **Analyzers** — two modes:
+  - `api` — Anthropic Messages API (supports batch for bulk analysis)
+  - `claudecode` — shells out to Claude Code CLI with a local go-ethereum clone for deep codebase exploration
+- **Usage throttling** — queries Claude OAuth usage API, pauses when session utilization exceeds threshold, resumes after reset
 - **REST API** — serves results to a frontend, authenticated via `X-API-Key` header
 - **SQLite** — persistent storage using `modernc.org/sqlite` (pure Go, no CGo)
 
@@ -61,13 +63,17 @@ docker compose --profile init run --rm batch-init
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GITHUB_TOKEN` | required | GitHub API token |
-| `ANTHROPIC_API_KEY` | required | Anthropic API key |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key (required for `api` mode) |
 | `API_KEY` | required | Static key for REST API auth |
-| `POLL_INTERVAL` | `4h` | How often to poll GitHub |
-| `BATCH_POLL_INTERVAL` | `5m` | How often to check pending batches |
+| `ANALYZER_TYPE` | `api` | `api` or `claudecode` |
+| `POLL_INTERVAL` | `1h` | How often to poll GitHub |
+| `USAGE_THRESHOLD` | `80` | Pause analysis when Claude session utilization exceeds this % (0 to disable) |
 | `LISTEN_ADDR` | `:8443` | HTTPS listen address |
 | `HTTP_LISTEN_ADDR` | `:8080` | HTTP listen address |
 | `DB_PATH` | `/data/geth-triage.db` | SQLite database path |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Model to use |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Model for API mode |
+| `CLAUDE_CODE_MODEL` | `sonnet` | Model for Claude Code mode |
+| `CLAUDE_CODE_MAX_BUDGET` | `0.50` | Max USD per PR analysis (Claude Code mode) |
+| `CLAUDE_CODE_TIMEOUT` | `5m` | Timeout per PR analysis (Claude Code mode) |
 | `BATCH_THRESHOLD` | `10` | Use Batch API when analyzing more than N PRs |
-| `MAX_DIFF_LINES` | `500` | Max diff lines sent to Claude |
+| `MAX_DIFF_LINES` | `500` | Max diff lines sent to Claude (API mode) |

@@ -11,14 +11,14 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/sina-geth/geth-triage/internal/analyzer"
-	"github.com/sina-geth/geth-triage/internal/anthropic"
-	"github.com/sina-geth/geth-triage/internal/api"
-	"github.com/sina-geth/geth-triage/internal/claude"
-	"github.com/sina-geth/geth-triage/internal/config"
-	ghclient "github.com/sina-geth/geth-triage/internal/github"
-	"github.com/sina-geth/geth-triage/internal/store"
-	"github.com/sina-geth/geth-triage/internal/tlscert"
+	"github.com/s1na/geth-triage/internal/analyzer"
+	"github.com/s1na/geth-triage/internal/anthropic"
+	"github.com/s1na/geth-triage/internal/api"
+	"github.com/s1na/geth-triage/internal/claude"
+	"github.com/s1na/geth-triage/internal/config"
+	ghclient "github.com/s1na/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/store"
+	"github.com/s1na/geth-triage/internal/tlscert"
 	"path/filepath"
 )
 

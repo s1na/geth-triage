@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/analyzer"
-	ghclient "github.com/sina-geth/geth-triage/internal/github"
-	"github.com/sina-geth/geth-triage/internal/store"
+	"github.com/s1na/geth-triage/internal/analyzer"
+	ghclient "github.com/s1na/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/store"
 )
 
 func NewServer(apiKey string, s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, pollInterval time.Duration, log zerolog.Logger) http.Handler {

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/github"
-	"github.com/sina-geth/geth-triage/internal/store"
+	"github.com/s1na/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/store"
 )
 
 // PRAnalyzer is the core interface for analyzing PRs.

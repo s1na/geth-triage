@@ -6,7 +6,7 @@ import (
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/github"
 )
 
 // CreateBatch creates a batch request for multiple PRs.

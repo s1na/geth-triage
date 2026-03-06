@@ -47,7 +47,7 @@ List open PRs with their latest analysis. Supports filtering, sorting, and pagin
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `category` | string | — | Filter by category: `closeable`, `high-priority`, `duplicate`, `needs-attention`, `normal` |
+| `category` | string | — | Filter by category: `closeable`, `high-priority`, `duplicate`, `mergeable`, `normal` |
 | `author` | string | — | Filter by GitHub username |
 | `min_confidence` | float | — | Minimum confidence score (0.0–1.0) |
 | `max_confidence` | float | — | Maximum confidence score (0.0–1.0) |
@@ -208,10 +208,12 @@ Aggregate statistics across all analyzed open PRs.
     "closeable": 24,
     "high-priority": 8,
     "duplicate": 5,
-    "needs-attention": 41,
+    "mergeable": 41,
     "normal": 52
   },
-  "avg_confidence": 0.78
+  "avg_confidence": 0.78,
+  "last_poll_time": "2025-03-04T15:00:00Z",
+  "next_poll_time": "2025-03-04T16:00:00Z"
 }
 ```
 
@@ -221,6 +223,8 @@ Aggregate statistics across all analyzed open PRs.
 | `analyzed_prs` | number | PRs that have at least one analysis |
 | `category_counts` | object | Count of PRs per category (latest analysis only) |
 | `avg_confidence` | number | Weighted average confidence across all categories |
+| `last_poll_time` | string | When GitHub was last polled (RFC 3339, empty if never) |
+| `next_poll_time` | string | Estimated next poll time (RFC 3339) |
 
 ---
 
@@ -231,7 +235,7 @@ Aggregate statistics across all analyzed open PRs.
 | `closeable` | Spam, AI slop, broken, abandoned, cosmetic-only |
 | `high-priority` | Security fixes, consensus-critical, known contributors, critical bugs |
 | `duplicate` | Overlaps with another open PR |
-| `needs-attention` | Meaningful changes that need review but aren't urgent |
+| `mergeable` | Reviewed/approved by maintainers but not yet merged |
 | `normal` | Default — minor improvements, WIP, unclear scope |
 
 ## Error Format
@@ -243,7 +247,8 @@ All errors return:
 
 ## Notes
 
-- The service polls GitHub every 4 hours and automatically analyzes new/changed PRs
+- The service polls GitHub every hour and automatically analyzes new/changed PRs
+- When usage threshold is exceeded, analysis pauses until the session resets rather than skipping PRs
 - Only open PRs are tracked; closed/merged PRs are retained but excluded from list queries
 - The `/analyze` endpoint is rate-limited by Claude API quotas, not by the service itself
 - Analysis history is append-only — re-analyzing a PR adds a new entry, doesn't overwrite

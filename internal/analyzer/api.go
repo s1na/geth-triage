@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/anthropic"
-	"github.com/sina-geth/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/anthropic"
+	"github.com/s1na/geth-triage/internal/github"
 )
 
 // APIAnalyzer implements PRAnalyzer using the Anthropic Messages API (single-shot).

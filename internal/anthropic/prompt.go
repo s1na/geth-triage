@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sina-geth/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/github"
 )
 
 const PromptVersion = "v2"

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sina-geth/geth-triage/internal/analyzer"
+	"github.com/s1na/geth-triage/internal/analyzer"
 )
 
 const usageEndpoint = "https://api.anthropic.com/api/oauth/usage"

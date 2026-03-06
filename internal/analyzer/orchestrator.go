@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/sina-geth/geth-triage/internal/github"
-	"github.com/sina-geth/geth-triage/internal/store"
+	"github.com/s1na/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/store"
 )
 
 func NewOrchestrator(a PRAnalyzer, s *store.Store, log zerolog.Logger, opts ...OrchestratorOption) *Orchestrator {

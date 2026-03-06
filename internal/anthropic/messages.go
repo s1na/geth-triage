@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
-	"github.com/sina-geth/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/github"
 )
 
 // AnalyzePR analyzes a single PR using the Messages API (synchronous).
