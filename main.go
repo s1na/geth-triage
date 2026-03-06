@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -12,14 +13,12 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/s1na/geth-triage/internal/analyzer"
-	"github.com/s1na/geth-triage/internal/anthropic"
 	"github.com/s1na/geth-triage/internal/api"
 	"github.com/s1na/geth-triage/internal/claude"
 	"github.com/s1na/geth-triage/internal/config"
 	ghclient "github.com/s1na/geth-triage/internal/github"
 	"github.com/s1na/geth-triage/internal/store"
 	"github.com/s1na/geth-triage/internal/tlscert"
-	"path/filepath"
 )
 
 func main() {
@@ -45,47 +44,24 @@ func main() {
 	}
 	defer db.Close()
 
-	// Init clients
-	gh := ghclient.NewClient(cfg.GithubToken, cfg.MaxDiffLines)
+	// Init GitHub client and poller
+	gh := ghclient.NewClient(cfg.GithubToken)
 	poller := ghclient.NewPoller(gh, db, log)
 
-	var prAnalyzer analyzer.PRAnalyzer
-	var opts []analyzer.OrchestratorOption
-
-	switch cfg.AnalyzerType {
-	case "claudecode":
-		ccAnalyzer := analyzer.NewClaudeCodeAnalyzer(cfg.GethRepoPath, cfg.ClaudeCodeModel, cfg.ClaudeCodeMaxBudget, cfg.ClaudeCodeTimeout, log)
-		if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
-			log.Fatal().Err(err).Msg("failed to ensure geth repo")
-		}
-		prAnalyzer = ccAnalyzer
-		opts = append(opts, analyzer.WithPromptVersion(analyzer.ClaudeCodePromptVersion))
-	case "api":
-		if cfg.AnthropicAPIKey == "" {
-			log.Fatal().Msg("ANTHROPIC_API_KEY is required when ANALYZER_TYPE=api")
-		}
-		ac := anthropic.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicModel)
-		prAnalyzer = analyzer.NewAPIAnalyzer(ac)
-		batchAnalyzer := analyzer.NewAPIBatchAnalyzer(ac, log)
-		opts = append(opts, analyzer.WithBatchAnalyzer(batchAnalyzer, cfg.BatchThreshold))
-		opts = append(opts, analyzer.WithPromptVersion(anthropic.PromptVersion))
-	default:
-		log.Fatal().Str("type", cfg.AnalyzerType).Msg("unknown ANALYZER_TYPE")
+	// Init Claude Code analyzer
+	ccAnalyzer := analyzer.NewClaudeCodeAnalyzer(cfg.GethRepoPath, cfg.ClaudeCodeModel, cfg.ClaudeCodeMaxBudget, cfg.ClaudeCodeTimeout, log)
+	if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
+		log.Fatal().Err(err).Msg("failed to ensure geth repo")
 	}
 
+	var opts []analyzer.OrchestratorOption
 	if cfg.UsageThreshold > 0 {
 		uc := claude.NewUsageChecker()
 		opts = append(opts, analyzer.WithUsageChecker(uc, cfg.UsageThreshold))
 		log.Info().Float64("threshold", cfg.UsageThreshold).Msg("usage-based throttling enabled")
 	}
 
-	az := analyzer.NewOrchestrator(prAnalyzer, db, log, opts...)
-
-	// Check if analyzer supports repo management (for pre-cycle updates)
-	var repoMgr analyzer.RepoManager
-	if rm, ok := prAnalyzer.(analyzer.RepoManager); ok {
-		repoMgr = rm
-	}
+	az := analyzer.NewOrchestrator(ccAnalyzer, db, log, opts...)
 
 	// Init HTTP server
 	handler := api.NewServer(cfg.APIKey, db, az, gh, cfg.PollInterval, log)
@@ -140,12 +116,10 @@ func main() {
 
 	// On startup: resume pending analysis, then poll if overdue
 	g.Go(func() error {
-		// First, analyze any PRs left over from a previous interrupted run
 		if err := az.AnalyzePending(ctx); err != nil {
 			log.Error().Err(err).Msg("failed to analyze pending PRs")
 		}
 
-		// Then check if a fresh poll is needed
 		lastPollStr, _ := db.GetState(ctx, "last_poll_time")
 		shouldPollNow := true
 		if lastPollStr != "" {
@@ -155,7 +129,7 @@ func main() {
 			}
 		}
 		if shouldPollNow {
-			runPollCycle(ctx, poller, az, repoMgr, log)
+			runPollCycle(ctx, poller, az, ccAnalyzer, log)
 		}
 		return nil
 	})
@@ -169,28 +143,7 @@ func main() {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				runPollCycle(ctx, poller, az, repoMgr, log)
-			}
-		}
-	})
-
-	// Batch polling loop
-	g.Go(func() error {
-		// Poll pending batches on startup
-		if err := az.PollPendingBatches(ctx); err != nil {
-			log.Error().Err(err).Msg("startup batch poll failed")
-		}
-
-		ticker := time.NewTicker(cfg.BatchPollInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-ticker.C:
-				if err := az.PollPendingBatches(ctx); err != nil {
-					log.Error().Err(err).Msg("batch poll failed")
-				}
+				runPollCycle(ctx, poller, az, ccAnalyzer, log)
 			}
 		}
 	})
@@ -200,7 +153,7 @@ func main() {
 	}
 }
 
-func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, repoMgr analyzer.RepoManager, log zerolog.Logger) {
+func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, ccAnalyzer *analyzer.ClaudeCodeAnalyzer, log zerolog.Logger) {
 	log.Info().Msg("starting poll cycle")
 	changed, err := poller.Poll(ctx)
 	if err != nil {
@@ -212,26 +165,12 @@ func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orc
 		return
 	}
 
-	// Update repo only when there's work to do
-	if repoMgr != nil {
-		if err := repoMgr.EnsureRepo(ctx); err != nil {
-			log.Warn().Err(err).Msg("failed to update repo before analysis")
-		}
+	// Update repo before analysis
+	if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
+		log.Warn().Err(err).Msg("failed to update repo before analysis")
 	}
 
-	// Claude Code analyzer fetches diff/comments itself via gh CLI,
-	// so we only need to fetch details for other analyzer types.
-	toAnalyze := changed
-	if repoMgr == nil {
-		detailed, err := poller.FetchDetails(ctx, changed)
-		if err != nil {
-			log.Error().Err(err).Msg("failed to fetch PR details")
-			return
-		}
-		toAnalyze = detailed
-	}
-
-	if err := az.Analyze(ctx, toAnalyze); err != nil {
+	if err := az.Analyze(ctx, changed); err != nil {
 		log.Error().Err(err).Msg("analysis failed")
 	}
 }

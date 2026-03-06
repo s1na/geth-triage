@@ -39,7 +39,7 @@ query($owner: String!, $repo: String!, $cursor: String) {
 }
 `
 
-// GraphQL query for fetching a single PR's metadata and comments.
+// GraphQL query for fetching a single PR's metadata.
 const prDetailQuery = `
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -52,29 +52,8 @@ query($owner: String!, $repo: String!, $number: Int!) {
       headRefOid
       additions
       deletions
-      comments(last: 20) {
-        totalCount
-        nodes {
-          author { login }
-          body
-          createdAt
-        }
-      }
-      reviews(last: 20) {
-        totalCount
-        nodes {
-          author { login }
-          body
-          createdAt
-          comments(last: 10) {
-            nodes {
-              author { login }
-              body
-              createdAt
-            }
-          }
-        }
-      }
+      comments { totalCount }
+      reviews { totalCount }
       createdAt
       updatedAt
     }
@@ -145,48 +124,8 @@ type gqlCount struct {
 
 type gqlDetailData struct {
 	Repository struct {
-		PullRequest gqlPRDetail `json:"pullRequest"`
+		PullRequest gqlPRNode `json:"pullRequest"`
 	} `json:"repository"`
-}
-
-type gqlPRDetail struct {
-	Number     int               `json:"number"`
-	Title      string            `json:"title"`
-	Author     *gqlActor         `json:"author"`
-	State      string            `json:"state"`
-	Labels     gqlLabels         `json:"labels"`
-	HeadRefOid string            `json:"headRefOid"`
-	Additions  int               `json:"additions"`
-	Deletions  int               `json:"deletions"`
-	Comments   gqlCommentConn    `json:"comments"`
-	Reviews    gqlReviewConn     `json:"reviews"`
-	CreatedAt  string            `json:"createdAt"`
-	UpdatedAt  string            `json:"updatedAt"`
-}
-
-type gqlCommentConn struct {
-	TotalCount int          `json:"totalCount"`
-	Nodes      []gqlComment `json:"nodes"`
-}
-
-type gqlComment struct {
-	Author    *gqlActor `json:"author"`
-	Body      string    `json:"body"`
-	CreatedAt string    `json:"createdAt"`
-}
-
-type gqlReviewConn struct {
-	TotalCount int         `json:"totalCount"`
-	Nodes      []gqlReview `json:"nodes"`
-}
-
-type gqlReview struct {
-	Author    *gqlActor `json:"author"`
-	Body      string    `json:"body"`
-	CreatedAt string    `json:"createdAt"`
-	Comments  struct {
-		Nodes []gqlComment `json:"nodes"`
-	} `json:"comments"`
 }
 
 // graphql sends a GraphQL request and unmarshals the data portion into dest.

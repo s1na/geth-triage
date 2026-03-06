@@ -34,22 +34,3 @@ type Analysis struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-type BatchJob struct {
-	ID             int64     `json:"id"`
-	BatchID        string    `json:"batch_id"`
-	Status         string    `json:"status"`
-	TotalRequests  int       `json:"total_requests"`
-	Succeeded      int       `json:"succeeded"`
-	Errored        int       `json:"errored"`
-	Canceled       int       `json:"canceled"`
-	Expired        int       `json:"expired"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-}
-
-type BatchRequest struct {
-	ID        int64  `json:"id"`
-	BatchID   string `json:"batch_id"`
-	CustomID  string `json:"custom_id"`
-	PRNumber  int    `json:"pr_number"`
-}

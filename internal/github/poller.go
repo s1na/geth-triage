@@ -87,17 +87,3 @@ func (p *Poller) Poll(ctx context.Context) ([]PRData, error) {
 	p.log.Info().Int("total", len(prs)).Int("changed", len(changed)).Msg("poll complete")
 	return changed, nil
 }
-
-// FetchDetails fetches diff and comments for PRs that need analysis.
-func (p *Poller) FetchDetails(ctx context.Context, prs []PRData) ([]PRData, error) {
-	var detailed []PRData
-	for _, pr := range prs {
-		detail, err := p.client.FetchPRDetail(ctx, pr.Number)
-		if err != nil {
-			p.log.Error().Err(err).Int("pr", pr.Number).Msg("failed to fetch PR details")
-			continue
-		}
-		detailed = append(detailed, *detail)
-	}
-	return detailed, nil
-}

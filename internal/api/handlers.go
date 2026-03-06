@@ -26,13 +26,11 @@ func NewHandlers(s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client,
 
 func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	lastPoll, _ := h.store.GetState(r.Context(), "last_poll_time")
-	pendingBatches, _ := h.store.PendingBatchJobs(r.Context())
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":           "ok",
-		"time":             time.Now().UTC(),
-		"last_poll_time":   lastPoll,
-		"pending_batches":  len(pendingBatches),
+		"status":         "ok",
+		"time":           time.Now().UTC(),
+		"last_poll_time": lastPoll,
 	})
 }
 
@@ -109,7 +107,7 @@ func (h *Handlers) AnalyzePR(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch fresh PR data from GitHub
-	prData, err := h.github.FetchPRDetail(r.Context(), number)
+	prData, err := h.github.FetchPR(r.Context(), number)
 	if err != nil {
 		h.log.Error().Err(err).Int("pr", number).Msg("failed to fetch PR from GitHub")
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to fetch PR from GitHub"})

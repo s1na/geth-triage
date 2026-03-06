@@ -326,66 +326,6 @@ func (s *Store) SetAnalyzedSHA(ctx context.Context, prNumber int, sha string) er
 	return s.SetState(ctx, key, sha)
 }
 
-// --- Batch Jobs ---
-
-func (s *Store) InsertBatchJob(ctx context.Context, job *BatchJob) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO batch_jobs (batch_id, status, total_requests, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)`,
-		job.BatchID, job.Status, job.TotalRequests, job.CreatedAt, job.UpdatedAt,
-	)
-	return err
-}
-
-func (s *Store) UpdateBatchJob(ctx context.Context, batchID, status string, succeeded, errored, canceled, expired int) error {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE batch_jobs SET status=?, succeeded=?, errored=?, canceled=?, expired=?, updated_at=?
-		WHERE batch_id=?`,
-		status, succeeded, errored, canceled, expired, time.Now().UTC(), batchID,
-	)
-	return err
-}
-
-func (s *Store) PendingBatchJobs(ctx context.Context) ([]BatchJob, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, batch_id, status, total_requests, succeeded, errored, canceled, expired, created_at, updated_at
-		FROM batch_jobs WHERE status = 'in_progress' OR status = 'canceling'`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var jobs []BatchJob
-	for rows.Next() {
-		var j BatchJob
-		if err := rows.Scan(&j.ID, &j.BatchID, &j.Status, &j.TotalRequests, &j.Succeeded, &j.Errored, &j.Canceled, &j.Expired, &j.CreatedAt, &j.UpdatedAt); err != nil {
-			return nil, err
-		}
-		jobs = append(jobs, j)
-	}
-	return jobs, rows.Err()
-}
-
-// --- Batch Requests ---
-
-func (s *Store) InsertBatchRequest(ctx context.Context, br *BatchRequest) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO batch_requests (batch_id, custom_id, pr_number) VALUES (?, ?, ?)`,
-		br.BatchID, br.CustomID, br.PRNumber,
-	)
-	return err
-}
-
-func (s *Store) GetBatchRequestByCustomID(ctx context.Context, customID string) (*BatchRequest, error) {
-	br := &BatchRequest{}
-	err := s.db.QueryRowContext(ctx, `SELECT id, batch_id, custom_id, pr_number FROM batch_requests WHERE custom_id = ?`, customID).
-		Scan(&br.ID, &br.BatchID, &br.CustomID, &br.PRNumber)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return br, err
-}
-
 // --- Service State ---
 
 func (s *Store) GetState(ctx context.Context, key string) (string, error) {

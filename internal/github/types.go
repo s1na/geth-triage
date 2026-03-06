@@ -14,12 +14,4 @@ type PRData struct {
 	CommentsCount int       `json:"comments_count"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
-	Diff          string    `json:"diff"`
-	Comments      []Comment `json:"comments"`
-}
-
-type Comment struct {
-	Author    string    `json:"author"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
 }
