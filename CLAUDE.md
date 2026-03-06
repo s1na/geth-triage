@@ -21,6 +21,10 @@ Service unit: `~/.config/systemd/user/geth-triage.service`
 
 After editing the unit file: `systemctl --user daemon-reload`
 
+## Frontend
+
+Frontend code is at `~/geth-review-roulette`. It runs on Vercel — just `git push` and it deploys as serverless.
+
 ## Build & Test
 
 ```bash

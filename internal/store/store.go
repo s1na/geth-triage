@@ -268,7 +268,7 @@ func (s *Store) PRsNeedingAnalysis(ctx context.Context, promptVersion string) ([
 				LEFT JOIN analyses a2 ON a2.id = (SELECT MAX(id) FROM analyses WHERE pr_number = pr2.number)
 				WHERE pr2.state = 'open' AND a2.id IS NOT NULL
 				AND pr2.head_sha != (
-					SELECT json_extract(value, '$.head_sha') FROM service_state WHERE key = 'analyzed_sha_' || pr2.number
+					SELECT value FROM service_state WHERE key = 'analyzed_sha_' || pr2.number
 				)
 			)
 		)`, promptVersion)
