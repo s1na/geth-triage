@@ -114,10 +114,16 @@ func main() {
 		return httpSrv.Shutdown(shutdownCtx)
 	})
 
-	// On startup: resume pending analysis, then poll if overdue
+	// Analysis worker — single goroutine processes the queue sequentially
+	g.Go(func() error {
+		az.Run(ctx)
+		return nil
+	})
+
+	// On startup: enqueue pending PRs, then poll if overdue
 	g.Go(func() error {
 		if err := az.AnalyzePending(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to analyze pending PRs")
+			log.Error().Err(err).Msg("failed to enqueue pending PRs")
 		}
 
 		lastPollStr, _ := db.GetState(ctx, "last_poll_time")
@@ -129,7 +135,7 @@ func main() {
 			}
 		}
 		if shouldPollNow {
-			runPollCycle(ctx, poller, az, ccAnalyzer, log)
+			runPollCycle(ctx, poller, az, log)
 		}
 		return nil
 	})
@@ -143,7 +149,7 @@ func main() {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				runPollCycle(ctx, poller, az, ccAnalyzer, log)
+				runPollCycle(ctx, poller, az, log)
 			}
 		}
 	})
@@ -153,7 +159,7 @@ func main() {
 	}
 }
 
-func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, ccAnalyzer *analyzer.ClaudeCodeAnalyzer, log zerolog.Logger) {
+func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, log zerolog.Logger) {
 	log.Info().Msg("starting poll cycle")
 	changed, err := poller.Poll(ctx)
 	if err != nil {
@@ -164,13 +170,6 @@ func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orc
 		log.Info().Msg("no PRs need analysis")
 		return
 	}
-
-	// Update repo before analysis
-	if err := ccAnalyzer.EnsureRepo(ctx); err != nil {
-		log.Warn().Err(err).Msg("failed to update repo before analysis")
-	}
-
-	if err := az.Analyze(ctx, changed); err != nil {
-		log.Error().Err(err).Msg("analysis failed")
-	}
+	az.Enqueue(changed...)
+	log.Info().Int("count", len(changed)).Msg("enqueued changed PRs for analysis")
 }

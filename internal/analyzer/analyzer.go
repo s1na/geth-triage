@@ -2,9 +2,11 @@ package analyzer
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/s1na/geth-triage/internal/github"
 	"github.com/s1na/geth-triage/internal/store"
 )
 
@@ -31,13 +33,20 @@ type UsageChecker interface {
 	CheckUsage(ctx context.Context) (*UsageStatus, error)
 }
 
-// Orchestrator manages analysis scheduling and persistence.
+// Orchestrator manages the analysis queue and a single worker that processes
+// PRs sequentially, ensuring exclusive access to the shared git repository.
 type Orchestrator struct {
 	analyzer       *ClaudeCodeAnalyzer
 	store          *store.Store
 	log            zerolog.Logger
 	usageChecker   UsageChecker
 	usageThreshold float64
+
+	// Analysis queue: keyed by PR number for dedup/upsert, ordered FIFO.
+	mu     sync.Mutex
+	items  map[int]github.PRData
+	order  []int
+	notify chan struct{}
 }
 
 // OrchestratorOption configures the Orchestrator.

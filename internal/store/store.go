@@ -323,11 +323,15 @@ func (s *Store) GetStats(ctx context.Context, pollInterval time.Duration) (*Stat
 		}
 	}
 
-	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pull_requests WHERE state = 'open'`).Scan(&stats.TotalPRs)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pull_requests WHERE state = 'open'`).Scan(&stats.TotalPRs); err != nil {
+		return nil, err
+	}
 
-	s.db.QueryRowContext(ctx, `
+	if err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(DISTINCT a.pr_number) FROM analyses a
-		JOIN pull_requests pr ON pr.number = a.pr_number WHERE pr.state = 'open'`).Scan(&stats.AnalyzedPRs)
+		JOIN pull_requests pr ON pr.number = a.pr_number WHERE pr.state = 'open'`).Scan(&stats.AnalyzedPRs); err != nil {
+		return nil, err
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.category, COUNT(*), AVG(a.confidence) FROM analyses a

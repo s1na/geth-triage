@@ -31,6 +31,7 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 		"status":         "ok",
 		"time":           time.Now().UTC(),
 		"last_poll_time": lastPoll,
+		"queue_depth":    h.analyzer.QueueLen(),
 	})
 }
 
@@ -134,15 +135,18 @@ func (h *Handlers) AnalyzePR(w http.ResponseWriter, r *http.Request) {
 		h.log.Error().Err(err).Int("pr", number).Msg("failed to upsert PR")
 	}
 
-	// Analyze via Messages API
-	analysis, err := h.analyzer.AnalyzeSingle(r.Context(), *prData)
-	if err != nil {
-		h.log.Error().Err(err).Int("pr", number).Msg("failed to analyze PR")
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "analysis failed"})
-		return
+	// Enqueue for analysis
+	pos, added := h.analyzer.EnqueueOne(*prData)
+	status := "queued"
+	if !added {
+		status = "already_queued"
 	}
 
-	writeJSON(w, http.StatusOK, analysis)
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"status":    status,
+		"pr_number": number,
+		"position":  pos,
+	})
 }
 
 func (h *Handlers) Stats(w http.ResponseWriter, r *http.Request) {
