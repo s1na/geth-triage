@@ -64,7 +64,7 @@ func main() {
 	az := analyzer.NewOrchestrator(ccAnalyzer, db, log, opts...)
 
 	// Init HTTP server
-	handler := api.NewServer(cfg.APIKey, db, az, gh, cfg.PollInterval, log)
+	handler := api.NewServer(cfg.APIKey, db, az, gh, log)
 	srv := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: handler,
@@ -120,27 +120,40 @@ func main() {
 		return nil
 	})
 
-	// On startup: enqueue pending PRs, then poll if overdue
+	// On startup: sync metadata if overdue, then enqueue pending analysis
 	g.Go(func() error {
-		if err := az.AnalyzePending(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to enqueue pending PRs")
-		}
-
 		lastPollStr, _ := db.GetState(ctx, "last_poll_time")
 		shouldPollNow := true
 		if lastPollStr != "" {
 			lastPoll, err := time.Parse(time.RFC3339, lastPollStr)
-			if err == nil && time.Since(lastPoll) < cfg.PollInterval {
+			if err == nil && time.Since(lastPoll) < cfg.MetadataPollInterval {
 				shouldPollNow = false
 			}
 		}
 		if shouldPollNow {
-			runPollCycle(ctx, poller, az, log)
+			runMetadataSync(ctx, poller, log)
+		}
+		if err := az.AnalyzePending(ctx); err != nil {
+			log.Error().Err(err).Msg("failed to enqueue pending PRs")
 		}
 		return nil
 	})
 
-	// PR polling loop
+	// Fast metadata sync loop — keeps PR state (open/closed) fresh
+	g.Go(func() error {
+		ticker := time.NewTicker(cfg.MetadataPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				runMetadataSync(ctx, poller, log)
+			}
+		}
+	})
+
+	// Slow analysis loop — enqueues PRs whose HEAD SHA changed since last analysis
 	g.Go(func() error {
 		ticker := time.NewTicker(cfg.PollInterval)
 		defer ticker.Stop()
@@ -149,7 +162,11 @@ func main() {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				runPollCycle(ctx, poller, az, log)
+				if err := az.AnalyzePending(ctx); err != nil {
+					log.Error().Err(err).Msg("analysis check failed")
+				} else {
+					log.Info().Msg("analysis check complete")
+				}
 			}
 		}
 	})
@@ -159,17 +176,9 @@ func main() {
 	}
 }
 
-func runPollCycle(ctx context.Context, poller *ghclient.Poller, az *analyzer.Orchestrator, log zerolog.Logger) {
-	log.Info().Msg("starting poll cycle")
-	changed, err := poller.Poll(ctx)
-	if err != nil {
-		log.Error().Err(err).Msg("poll failed")
-		return
+func runMetadataSync(ctx context.Context, poller *ghclient.Poller, log zerolog.Logger) {
+	log.Info().Msg("syncing PR metadata from GitHub")
+	if _, err := poller.Poll(ctx); err != nil {
+		log.Error().Err(err).Msg("metadata sync failed")
 	}
-	if len(changed) == 0 {
-		log.Info().Msg("no PRs need analysis")
-		return
-	}
-	az.Enqueue(changed...)
-	log.Info().Int("count", len(changed)).Msg("enqueued changed PRs for analysis")
 }

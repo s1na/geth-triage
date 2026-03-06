@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/s1na/geth-triage/internal/analyzer"
@@ -10,8 +9,8 @@ import (
 	"github.com/s1na/geth-triage/internal/store"
 )
 
-func NewServer(apiKey string, s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, pollInterval time.Duration, log zerolog.Logger) http.Handler {
-	h := NewHandlers(s, az, gh, pollInterval, log)
+func NewServer(apiKey string, s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, log zerolog.Logger) http.Handler {
+	h := NewHandlers(s, az, gh, log)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", h.Health)

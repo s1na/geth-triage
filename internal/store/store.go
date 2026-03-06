@@ -307,19 +307,16 @@ type Stats struct {
 	CategoryCounts map[string]int `json:"category_counts"`
 	AvgConfidence  float64        `json:"avg_confidence"`
 	LastPollTime   *time.Time     `json:"last_poll_time,omitempty"`
-	NextPollTime   *time.Time     `json:"next_poll_time,omitempty"`
 }
 
-func (s *Store) GetStats(ctx context.Context, pollInterval time.Duration) (*Stats, error) {
+func (s *Store) GetStats(ctx context.Context) (*Stats, error) {
 	stats := &Stats{CategoryCounts: make(map[string]int)}
 
-	// Poll times
+	// Last poll time
 	lastPollStr, _ := s.GetState(ctx, "last_poll_time")
 	if lastPollStr != "" {
 		if t, err := time.Parse(time.RFC3339, lastPollStr); err == nil {
 			stats.LastPollTime = &t
-			next := t.Add(pollInterval)
-			stats.NextPollTime = &next
 		}
 	}
 

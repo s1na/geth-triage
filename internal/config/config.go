@@ -10,7 +10,8 @@ import (
 type Config struct {
 	GithubToken    string        `env:"GITHUB_TOKEN,required"`
 	APIKey         string        `env:"API_KEY,required"`
-	PollInterval   time.Duration `env:"POLL_INTERVAL" envDefault:"1h"`
+	PollInterval         time.Duration `env:"POLL_INTERVAL" envDefault:"1h"`
+	MetadataPollInterval time.Duration `env:"METADATA_POLL_INTERVAL" envDefault:"3m"`
 	ListenAddr     string        `env:"LISTEN_ADDR" envDefault:":8443"`
 	HTTPListenAddr string        `env:"HTTP_LISTEN_ADDR" envDefault:":8080"`
 	DBPath         string        `env:"DB_PATH" envDefault:"/data/geth-triage.db"`
