@@ -25,8 +25,7 @@ Service health check.
 {
   "status": "ok",
   "time": "2025-03-04T19:17:00Z",
-  "last_poll_time": "2025-03-04T15:00:00Z",
-  "pending_batches": 0
+  "last_poll_time": "2025-03-04T15:00:00Z"
 }
 ```
 
@@ -35,7 +34,6 @@ Service health check.
 | `status` | string | Always `"ok"` if service is running |
 | `time` | string | Current server time (UTC, RFC 3339) |
 | `last_poll_time` | string | When GitHub was last polled (empty string if never) |
-| `pending_batches` | number | Count of in-progress Anthropic batch jobs |
 
 ---
 
@@ -133,10 +131,10 @@ Get a single PR with its full analysis history.
       "confidence": 0.85,
       "explanation": "Bug fix in EIP-712 typed data encoding...",
       "related_prs": [],
-      "model": "claude-sonnet-4-20250514",
-      "prompt_version": "v1",
-      "input_tokens": 885,
-      "output_tokens": 99,
+      "model": "claude-code:sonnet",
+      "prompt_version": "cc-v3",
+      "input_tokens": 12500,
+      "output_tokens": 3200,
       "created_at": "2025-03-04T19:17:05Z"
     }
   ]
@@ -148,7 +146,7 @@ Get a single PR with its full analysis history.
 | `pr` | object | PR metadata |
 | `analyses` | array | All analyses for this PR, newest first |
 | `analyses[].related_prs` | array | Related PR numbers (e.g. `[33500, 33412]`) |
-| `analyses[].model` | string | Claude model used |
+| `analyses[].model` | string | Claude model used (e.g. `claude-code:sonnet`) |
 | `analyses[].prompt_version` | string | Prompt version (for tracking prompt changes) |
 | `analyses[].input_tokens` | number | Tokens sent to Claude |
 | `analyses[].output_tokens` | number | Tokens received from Claude |
@@ -162,7 +160,7 @@ Get a single PR with its full analysis history.
 
 ### POST /api/v1/prs/{number}/analyze
 
-Trigger a fresh analysis for a specific PR. Fetches latest PR data from GitHub and analyzes synchronously via Claude. Takes 3–10 seconds depending on diff size.
+Trigger a fresh analysis for a specific PR. Fetches latest PR data from GitHub and analyzes synchronously via Claude Code CLI. Takes 1–5 minutes depending on PR complexity.
 
 **Request** — No body required.
 
@@ -175,10 +173,10 @@ Trigger a fresh analysis for a specific PR. Fetches latest PR data from GitHub a
   "confidence": 0.85,
   "explanation": "Bug fix in EIP-712 typed data encoding...",
   "related_prs": [],
-  "model": "claude-sonnet-4-20250514",
-  "prompt_version": "v1",
-  "input_tokens": 885,
-  "output_tokens": 99,
+  "model": "claude-code:sonnet",
+  "prompt_version": "cc-v3",
+  "input_tokens": 12500,
+  "output_tokens": 3200,
   "created_at": "2025-03-04T19:20:00Z"
 }
 ```

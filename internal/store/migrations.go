@@ -7,10 +7,6 @@ import (
 
 func runMigrations(ctx context.Context, db *sql.DB) error {
 	_, err := db.ExecContext(ctx, `
-		PRAGMA journal_mode=WAL;
-		PRAGMA busy_timeout=5000;
-		PRAGMA foreign_keys=ON;
-
 		CREATE TABLE IF NOT EXISTS pull_requests (
 			number        INTEGER PRIMARY KEY,
 			title         TEXT NOT NULL,
@@ -41,27 +37,6 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_analyses_pr_number ON analyses(pr_number);
 		CREATE INDEX IF NOT EXISTS idx_analyses_category ON analyses(category);
-
-		CREATE TABLE IF NOT EXISTS batch_jobs (
-			id             INTEGER PRIMARY KEY AUTOINCREMENT,
-			batch_id       TEXT NOT NULL UNIQUE,
-			status         TEXT NOT NULL DEFAULT 'in_progress',
-			total_requests INTEGER NOT NULL DEFAULT 0,
-			succeeded      INTEGER NOT NULL DEFAULT 0,
-			errored        INTEGER NOT NULL DEFAULT 0,
-			canceled       INTEGER NOT NULL DEFAULT 0,
-			expired        INTEGER NOT NULL DEFAULT 0,
-			created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE TABLE IF NOT EXISTS batch_requests (
-			id        INTEGER PRIMARY KEY AUTOINCREMENT,
-			batch_id  TEXT NOT NULL REFERENCES batch_jobs(batch_id),
-			custom_id TEXT NOT NULL,
-			pr_number INTEGER NOT NULL REFERENCES pull_requests(number)
-		);
-		CREATE INDEX IF NOT EXISTS idx_batch_requests_batch_id ON batch_requests(batch_id);
 
 		CREATE TABLE IF NOT EXISTS service_state (
 			key   TEXT PRIMARY KEY,

@@ -216,18 +216,6 @@ func (s *Store) InsertAnalysis(ctx context.Context, a *Analysis) error {
 	return err
 }
 
-func (s *Store) LatestAnalysis(ctx context.Context, prNumber int) (*Analysis, error) {
-	a := &Analysis{}
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, pr_number, category, confidence, explanation, related_prs, model, prompt_version, input_tokens, output_tokens, created_at
-		FROM analyses WHERE pr_number = ? ORDER BY id DESC LIMIT 1`, prNumber).
-		Scan(&a.ID, &a.PRNumber, &a.Category, &a.Confidence, &a.Explanation, &a.RelatedPRs, &a.Model, &a.PromptVersion, &a.InputTokens, &a.OutputTokens, &a.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return a, err
-}
-
 func (s *Store) AnalysisHistory(ctx context.Context, prNumber int) ([]Analysis, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, pr_number, category, confidence, explanation, related_prs, model, prompt_version, input_tokens, output_tokens, created_at
@@ -286,39 +274,6 @@ func (s *Store) PRsNeedingAnalysis(ctx context.Context, promptVersion string) ([
 		prs = append(prs, pr)
 	}
 	return prs, rows.Err()
-}
-
-// Simpler change detection: compare head_sha at analysis time
-func (s *Store) PRNeedsAnalysis(ctx context.Context, prNumber int, promptVersion string) (bool, error) {
-	var count int
-	err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM pull_requests pr
-		LEFT JOIN analyses a ON a.pr_number = pr.number AND a.id = (SELECT MAX(id) FROM analyses WHERE pr_number = pr.number)
-		WHERE pr.number = ?
-		AND pr.state = 'open'
-		AND (a.id IS NULL OR a.prompt_version != ?)`,
-		prNumber, promptVersion).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	if count > 0 {
-		return true, nil
-	}
-
-	// Check if head_sha changed since last analysis
-	var headSHA, analyzedSHA sql.NullString
-	err = s.db.QueryRowContext(ctx, `
-		SELECT pr.head_sha, ss.value
-		FROM pull_requests pr
-		LEFT JOIN service_state ss ON ss.key = 'analyzed_sha_' || pr.number
-		WHERE pr.number = ?`, prNumber).Scan(&headSHA, &analyzedSHA)
-	if err != nil {
-		return false, err
-	}
-	if !analyzedSHA.Valid || headSHA.String != analyzedSHA.String {
-		return true, nil
-	}
-	return false, nil
 }
 
 func (s *Store) SetAnalyzedSHA(ctx context.Context, prNumber int, sha string) error {

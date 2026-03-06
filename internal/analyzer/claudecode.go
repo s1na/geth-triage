@@ -105,8 +105,8 @@ var analysisSchema = func() string {
 	return string(b)
 }()
 
-// ClaudeCodeAnalyzer implements PRAnalyzer by shelling out to the Claude Code CLI
-// running inside a local go-ethereum clone.
+// ClaudeCodeAnalyzer shells out to the Claude Code CLI running inside a local
+// go-ethereum clone to analyze PRs.
 type ClaudeCodeAnalyzer struct {
 	repoPath  string
 	model     string
@@ -180,7 +180,7 @@ func (c *ClaudeCodeAnalyzer) resetRepo(ctx context.Context) error {
 	return nil
 }
 
-// AnalyzePR implements PRAnalyzer by invoking claude --print with the PR data.
+// AnalyzePR invokes claude --print with the PR data and returns structured output.
 func (c *ClaudeCodeAnalyzer) AnalyzePR(ctx context.Context, pr github.PRData) (*AnalysisResult, error) {
 	// Ensure clean working tree before each analysis
 	if err := c.resetRepo(ctx); err != nil {

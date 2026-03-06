@@ -49,6 +49,7 @@ func storePRToData(pr store.PullRequest) github.PRData {
 		Number:        pr.Number,
 		Title:         pr.Title,
 		Author:        pr.Author,
+		State:         pr.State,
 		Labels:        labels,
 		HeadSHA:       pr.HeadSHA,
 		Additions:     pr.Additions,
