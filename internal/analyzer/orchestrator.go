@@ -196,6 +196,7 @@ func (o *Orchestrator) analyzeSingle(ctx context.Context, pr github.PRData) (*st
 }
 
 // waitForUsage checks usage and blocks until utilization drops below threshold.
+// Both the 5-hour and 7-day windows are checked against the same threshold.
 func (o *Orchestrator) waitForUsage(ctx context.Context) error {
 	if o.usageChecker == nil || o.usageThreshold <= 0 {
 		return nil
@@ -206,20 +207,47 @@ func (o *Orchestrator) waitForUsage(ctx context.Context) error {
 			o.log.Warn().Err(err).Msg("failed to check usage, continuing anyway")
 			return nil
 		}
-		o.log.Info().Float64("utilization", status.Utilization).Float64("threshold", o.usageThreshold).Msg("usage check")
-		if status.Utilization < o.usageThreshold {
+		o.log.Info().
+			Float64("five_hour", status.FiveHour.Utilization).
+			Float64("seven_day", status.SevenDay.Utilization).
+			Float64("threshold", o.usageThreshold).
+			Msg("usage check")
+
+		// Find the window with the highest utilization that exceeds the threshold.
+		var blocking *UsageWindow
+		if status.FiveHour.Utilization >= o.usageThreshold && status.SevenDay.Utilization >= o.usageThreshold {
+			// Both over: wait for whichever resets sooner.
+			if status.FiveHour.ResetsAt.Before(status.SevenDay.ResetsAt) {
+				blocking = &status.FiveHour
+			} else {
+				blocking = &status.SevenDay
+			}
+		} else if status.FiveHour.Utilization >= o.usageThreshold {
+			blocking = &status.FiveHour
+		} else if status.SevenDay.Utilization >= o.usageThreshold {
+			blocking = &status.SevenDay
+		}
+		if blocking == nil {
 			return nil
 		}
 
-		waitDur := time.Until(status.ResetsAt)
+		waitDur := time.Until(blocking.ResetsAt)
 		if waitDur <= 0 {
 			waitDur = 5 * time.Minute
 		}
 		o.log.Warn().
-			Float64("utilization", status.Utilization).
-			Time("resets_at", status.ResetsAt).
+			Float64("five_hour", status.FiveHour.Utilization).
+			Float64("seven_day", status.SevenDay.Utilization).
+			Time("resets_at", blocking.ResetsAt).
 			Dur("wait", waitDur).
 			Msg("usage threshold exceeded, waiting for reset")
+
+		if o.notifier != nil {
+			o.notifier.Notify(ctx, "Usage limit hit",
+				fmt.Sprintf("5h: %.0f%%, 7d: %.0f%% (threshold: %.0f%%)\nResets at %s",
+					status.FiveHour.Utilization, status.SevenDay.Utilization, o.usageThreshold,
+					blocking.ResetsAt.Format(time.RFC822)))
+		}
 
 		select {
 		case <-ctx.Done():

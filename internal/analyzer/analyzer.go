@@ -22,15 +22,26 @@ type AnalysisResult struct {
 	OutputTokens  int     `json:"output_tokens"`
 }
 
-// UsageStatus is returned by UsageChecker with current utilization and reset time.
-type UsageStatus struct {
+// UsageWindow contains utilization and reset time for a single rate-limit window.
+type UsageWindow struct {
 	Utilization float64
 	ResetsAt    time.Time
+}
+
+// UsageStatus is returned by UsageChecker with current utilization across windows.
+type UsageStatus struct {
+	FiveHour UsageWindow
+	SevenDay UsageWindow
 }
 
 // UsageChecker checks current API usage.
 type UsageChecker interface {
 	CheckUsage(ctx context.Context) (*UsageStatus, error)
+}
+
+// Notifier sends alerts.
+type Notifier interface {
+	Notify(ctx context.Context, title, message string)
 }
 
 // Orchestrator manages the analysis queue and a single worker that processes
@@ -41,6 +52,7 @@ type Orchestrator struct {
 	log            zerolog.Logger
 	usageChecker   UsageChecker
 	usageThreshold float64
+	notifier       Notifier
 
 	// Analysis queue: keyed by PR number for dedup/upsert, ordered FIFO.
 	mu     sync.Mutex
@@ -58,5 +70,12 @@ func WithUsageChecker(uc UsageChecker, threshold float64) OrchestratorOption {
 	return func(o *Orchestrator) {
 		o.usageChecker = uc
 		o.usageThreshold = threshold
+	}
+}
+
+// WithNotifier sets a notifier for usage alerts.
+func WithNotifier(n Notifier) OrchestratorOption {
+	return func(o *Orchestrator) {
+		o.notifier = n
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/s1na/geth-triage/internal/claude"
 	"github.com/s1na/geth-triage/internal/config"
 	ghclient "github.com/s1na/geth-triage/internal/github"
+	"github.com/s1na/geth-triage/internal/pushover"
 	"github.com/s1na/geth-triage/internal/store"
 	"github.com/s1na/geth-triage/internal/tlscert"
 )
@@ -59,6 +60,10 @@ func main() {
 		uc := claude.NewUsageChecker()
 		opts = append(opts, analyzer.WithUsageChecker(uc, cfg.UsageThreshold))
 		log.Info().Float64("threshold", cfg.UsageThreshold).Msg("usage-based throttling enabled")
+	}
+	if cfg.PushoverToken != "" && cfg.PushoverUser != "" {
+		opts = append(opts, analyzer.WithNotifier(pushover.New(cfg.PushoverToken, cfg.PushoverUser, log)))
+		log.Info().Msg("pushover notifications enabled")
 	}
 
 	az := analyzer.NewOrchestrator(ccAnalyzer, db, log, opts...)

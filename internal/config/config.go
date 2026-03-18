@@ -11,7 +11,7 @@ type Config struct {
 	GithubToken          string        `env:"GITHUB_TOKEN,required"`
 	APIKey               string        `env:"API_KEY,required"`
 	MetadataPollInterval time.Duration `env:"METADATA_POLL_INTERVAL" envDefault:"3m"`
-	AnalysisInterval     time.Duration `env:"POLL_INTERVAL" envDefault:"1h"`
+	AnalysisInterval     time.Duration `env:"POLL_INTERVAL" envDefault:"4h"`
 	ListenAddr           string        `env:"LISTEN_ADDR" envDefault:":8443"`
 	HTTPListenAddr       string        `env:"HTTP_LISTEN_ADDR" envDefault:":8080"`
 	DBPath               string        `env:"DB_PATH" envDefault:"/data/geth-triage.db"`
@@ -29,6 +29,10 @@ type Config struct {
 	// The OAuth usage API reports a 5-hour rolling window utilization.
 	// Set to 0 to disable usage checking.
 	UsageThreshold float64 `env:"USAGE_THRESHOLD" envDefault:"80"`
+
+	// Pushover notifications. Leave empty to disable.
+	PushoverToken string `env:"PUSHOVER_TOKEN" envDefault:""`
+	PushoverUser  string `env:"PUSHOVER_USER" envDefault:""`
 }
 
 func Load() (*Config, error) {

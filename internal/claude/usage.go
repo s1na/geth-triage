@@ -57,9 +57,15 @@ func (u *UsageChecker) CheckUsage(ctx context.Context) (*analyzer.UsageStatus, e
 
 	status := &analyzer.UsageStatus{}
 	if data.FiveHour != nil {
-		status.Utilization = data.FiveHour.Utilization
+		status.FiveHour.Utilization = data.FiveHour.Utilization
 		if data.FiveHour.ResetsAt != "" {
-			status.ResetsAt, _ = time.Parse(time.RFC3339, data.FiveHour.ResetsAt)
+			status.FiveHour.ResetsAt, _ = time.Parse(time.RFC3339, data.FiveHour.ResetsAt)
+		}
+	}
+	if data.SevenDay != nil {
+		status.SevenDay.Utilization = data.SevenDay.Utilization
+		if data.SevenDay.ResetsAt != "" {
+			status.SevenDay.ResetsAt, _ = time.Parse(time.RFC3339, data.SevenDay.ResetsAt)
 		}
 	}
 	return status, nil
@@ -67,6 +73,7 @@ func (u *UsageChecker) CheckUsage(ctx context.Context) (*analyzer.UsageStatus, e
 
 type usageResponse struct {
 	FiveHour *usageWindow `json:"five_hour"`
+	SevenDay *usageWindow `json:"seven_day"`
 }
 
 type usageWindow struct {
