@@ -149,7 +149,7 @@ func (h *Handlers) AnalyzePR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Stats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.store.GetStats(r.Context())
+	stats, err := h.store.GetStats(r.Context(), analyzer.ClaudeCodePromptVersion)
 	if err != nil {
 		h.log.Error().Err(err).Msg("failed to get stats")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})

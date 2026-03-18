@@ -25,6 +25,10 @@ After editing the unit file: `systemctl --user daemon-reload`
 
 Frontend code is at `~/geth-review-roulette`. It runs on Vercel — just `git push` and it deploys as serverless.
 
+## Git
+
+Never run `git push`. Committing is fine, but the user will push manually.
+
 ## Build & Test
 
 ```bash

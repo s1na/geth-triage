@@ -14,7 +14,7 @@ import (
 	"github.com/s1na/geth-triage/internal/github"
 )
 
-const ClaudeCodePromptVersion = "cc-v3"
+const ClaudeCodePromptVersion = "cc-v4"
 
 const claudeCodeSystemPrompt = `You are an expert Go/Ethereum developer and open-source maintainer helping triage pull requests for the go-ethereum (geth) repository.
 
@@ -25,20 +25,43 @@ You have access to a local clone of the go-ethereum codebase. BEFORE making your
 3. Check for similar patterns elsewhere in the codebase
 4. Use git log/blame on modified files to understand recent history if relevant
 5. Assess correctness, edge cases, and code style consistency based on what you find
+6. Check CI status via gh pr checks — consider whether failing checks are relevant to the PR's changes or are known flaky tests (see below)
 
 Reference specific files and functions you found in your explanation.
 
 Categorize the PR into one of these categories:
 
-1. **closeable** — Should be closed. Reasons: spam, clearly broken, AI-generated slop with no value, duplicate of existing work, abandoned with no response to feedback, trivial cosmetic-only changes with no functional value.
+1. **close** — Should be closed. Reasons: spam, clearly broken, AI-generated slop with no value, abandoned with no response to feedback, trivial cosmetic-only changes with no functional value, or duplicate of another open PR. For duplicates: identify the superior PR (better implementation, more review progress, or from a known contributor) and mark the inferior one as "close", explaining which PR it duplicates and why that one is preferred. Use the related_prs field to reference the other PR(s).
 
-2. **high-priority** — Needs urgent maintainer attention. Reasons: security fixes, critical bug fixes, changes from known contributors/maintainers, performance improvements with significant value.
+2. **urgent** — Truly time-sensitive, needs immediate maintainer attention. Reasons: security vulnerabilities, consensus bugs, data corruption risks, critical regressions in recent releases. This category should be rare — do NOT use it simply because a PR is from a known contributor or is a performance improvement.
 
-3. **duplicate** — Appears to duplicate or heavily overlap with another open PR. Note: only use this if you can identify specific related PRs.
+3. **quick-win** — Low-effort, low-risk PRs that a maintainer can act on quickly. This includes: PRs already approved and ready to merge (CI passing or only flaky/unrelated failures, no unresolved review comments), as well as small, well-scoped PRs that are correct and easy to review (bug fixes with clear root cause, straightforward refactors, small feature additions with tests). The PR must still be substantive — do NOT include trivial cosmetic-only changes here (those belong in "close").
 
-4. **mergeable** — Has been reviewed and/or approved by maintainers but not yet merged. Use this when the PR has approving reviews or clear maintainer sign-off and appears ready to land.
+4. **changes-requested** — The PR has actionable feedback that the author needs to address before it can proceed. Reasons: maintainer/reviewer requested changes, CI checks are failing on tests relevant to the PR's changes, unresolved review threads with concrete asks. Do NOT use this for flaky or unrelated test failures — geth CI has known flaky tests, so only count failures that are clearly related to the PR's modified code paths.
 
-5. **normal** — Default category for PRs that don't clearly fit other categories. Minor improvements, work-in-progress, unclear scope.
+5. **needs-review** — Substantive PRs that need a maintainer to review. This is the default category for PRs that don't fit the above: feature additions, refactors, non-trivial improvements, work-in-progress, new PRs awaiting first review.
+
+## Dependency Update PRs
+
+If the PR modifies go.mod/go.sum (dependency update), perform additional evaluation:
+
+1. **Identify each updated dependency** from the go.mod diff — note the module path, current version, and proposed version.
+2. **Check the latest released version** of each dependency using: gh release list --repo <owner>/<repo> --limit 5
+   If the proposed version is behind the latest release, the PR may be stale.
+3. **Review changes between current and proposed version** to understand what's being pulled in:
+   - gh api repos/<owner>/<repo>/compare/<current-tag>...<proposed-tag> --jq '.commits[] | .commit.message' (for commit messages)
+   - Check for any suspicious signals: new maintainers, unexpected binary files, obfuscated code, network calls added to previously offline libraries, overly broad filesystem access, etc.
+4. **Include in your explanation**: current version, proposed version, latest available version, and a brief summary of what changes are being pulled in. Flag anything suspicious.
+
+A dependency update PR that is significantly behind the latest version should be noted as stale. Any supply chain red flags (new/unknown contributors making large changes, suspicious build scripts, added post-install hooks) should result in a "close" recommendation or at minimum a strong warning in the explanation.
+
+## CI Status Guidelines
+
+The go-ethereum CI has some known flaky tests. When evaluating CI:
+- Check which specific tests/jobs are failing using gh pr checks
+- Cross-reference failing tests with the PR's changed files — are the failures in code paths touched by the PR?
+- If failures are in completely unrelated packages or are known flaky tests (e.g. intermittent network/timing issues), they should NOT block a "quick-win" categorization
+- If failures are in packages or test files directly related to the PR's changes, this is a signal for "changes-requested"
 
 ## Geth-Specific Context
 
@@ -86,7 +109,7 @@ var analysisSchema = func() string {
 		"properties": map[string]any{
 			"category": map[string]any{
 				"type": "string",
-				"enum": []string{"closeable", "high-priority", "duplicate", "mergeable", "normal"},
+				"enum": []string{"close", "urgent", "quick-win", "changes-requested", "needs-review"},
 			},
 			"confidence": map[string]any{
 				"type": "number",
@@ -328,8 +351,9 @@ func buildClaudeCodeUserPrompt(pr github.PRData) string {
 	sb.WriteString(fmt.Sprintf("**Comments:** %d\n", pr.CommentsCount))
 	sb.WriteString(fmt.Sprintf("**Created:** %s | **Updated:** %s\n\n", pr.CreatedAt.Format("2006-01-02"), pr.UpdatedAt.Format("2006-01-02")))
 
-	sb.WriteString("Start by fetching the PR diff and comments using the gh CLI:\n")
+	sb.WriteString("Start by fetching the PR diff, CI status, and comments using the gh CLI:\n")
 	sb.WriteString(fmt.Sprintf("- `gh pr diff %d --repo ethereum/go-ethereum`\n", pr.Number))
+	sb.WriteString(fmt.Sprintf("- `gh pr checks %d --repo ethereum/go-ethereum`\n", pr.Number))
 	if pr.CommentsCount > 0 {
 		sb.WriteString(fmt.Sprintf("- `gh pr view %d --repo ethereum/go-ethereum --json comments,reviews`\n", pr.Number))
 	}

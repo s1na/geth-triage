@@ -309,7 +309,7 @@ type Stats struct {
 	LastPollTime   *time.Time     `json:"last_poll_time,omitempty"`
 }
 
-func (s *Store) GetStats(ctx context.Context) (*Stats, error) {
+func (s *Store) GetStats(ctx context.Context, promptVersion string) (*Stats, error) {
 	stats := &Stats{CategoryCounts: make(map[string]int)}
 
 	// Last poll time
@@ -324,18 +324,22 @@ func (s *Store) GetStats(ctx context.Context) (*Stats, error) {
 		return nil, err
 	}
 
+	// Count only PRs whose latest analysis matches the current prompt version
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT a.pr_number) FROM analyses a
-		JOIN pull_requests pr ON pr.number = a.pr_number WHERE pr.state = 'open'`).Scan(&stats.AnalyzedPRs); err != nil {
+		SELECT COUNT(*) FROM analyses a
+		INNER JOIN (SELECT pr_number, MAX(id) as max_id FROM analyses GROUP BY pr_number) latest ON a.id = latest.max_id
+		JOIN pull_requests pr ON pr.number = a.pr_number
+		WHERE pr.state = 'open' AND a.prompt_version = ?`, promptVersion).Scan(&stats.AnalyzedPRs); err != nil {
 		return nil, err
 	}
 
+	// Category counts only for current prompt version
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.category, COUNT(*), AVG(a.confidence) FROM analyses a
 		INNER JOIN (SELECT pr_number, MAX(id) as max_id FROM analyses GROUP BY pr_number) latest ON a.id = latest.max_id
 		JOIN pull_requests pr ON pr.number = a.pr_number
-		WHERE pr.state = 'open'
-		GROUP BY a.category`)
+		WHERE pr.state = 'open' AND a.prompt_version = ?
+		GROUP BY a.category`, promptVersion)
 	if err != nil {
 		return nil, err
 	}
