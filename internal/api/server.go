@@ -9,9 +9,9 @@ import (
 	"github.com/s1na/geth-triage/internal/store"
 )
 
-func NewServer(apiKey, webhookSecret string, s *store.Store, az *analyzer.Orchestrator, poller *ghclient.Poller, gh *ghclient.Client, log zerolog.Logger) http.Handler {
+func NewServer(apiKey, webhookSecret string, s *store.Store, az *analyzer.Orchestrator, gh *ghclient.Client, log zerolog.Logger) http.Handler {
 	h := NewHandlers(s, az, gh, log)
-	wh := NewWebhookHandler(webhookSecret, poller, az, log)
+	wh := NewWebhookHandler(webhookSecret, s, gh, az, log)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", h.Health)
