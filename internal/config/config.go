@@ -19,6 +19,9 @@ type Config struct {
 	TLSCert              string        `env:"TLS_CERT" envDefault:"/data/tls/cert.pem"`
 	TLSKey               string        `env:"TLS_KEY" envDefault:"/data/tls/key.pem"`
 
+	// GitHub webhook secret for signature verification.
+	GithubWebhookSecret string `env:"GITHUB_WEBHOOK_SECRET" envDefault:""`
+
 	// Claude Code analyzer settings
 	GethRepoPath        string        `env:"GETH_REPO_PATH" envDefault:"./go-ethereum"`
 	ClaudeCodeModel     string        `env:"CLAUDE_CODE_MODEL" envDefault:"sonnet"`

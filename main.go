@@ -74,7 +74,7 @@ func main() {
 		Msg("polling intervals configured")
 
 	// Init HTTP server
-	handler := api.NewServer(cfg.APIKey, db, az, gh, log)
+	handler := api.NewServer(cfg.APIKey, cfg.GithubWebhookSecret, db, az, poller, gh, log)
 	srv := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: handler,
