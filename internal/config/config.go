@@ -10,7 +10,7 @@ import (
 type Config struct {
 	GithubToken          string        `env:"GITHUB_TOKEN,required"`
 	APIKey               string        `env:"API_KEY,required"`
-	MetadataPollInterval time.Duration `env:"METADATA_POLL_INTERVAL" envDefault:"3m"`
+	MetadataPollInterval time.Duration `env:"METADATA_POLL_INTERVAL" envDefault:"15m"`
 	AnalysisInterval     time.Duration `env:"POLL_INTERVAL" envDefault:"4h"`
 	ListenAddr           string        `env:"LISTEN_ADDR" envDefault:":8443"`
 	HTTPListenAddr       string        `env:"HTTP_LISTEN_ADDR" envDefault:":8080"`
