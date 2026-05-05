@@ -31,15 +31,17 @@ Reference specific files and functions you found in your explanation.
 
 Categorize the PR into one of these categories:
 
-1. **close** — Should be closed. Reasons: spam, clearly broken, AI-generated slop with no value, abandoned with no response to feedback, trivial cosmetic-only changes with no functional value, or duplicate of another open PR. For duplicates: identify the superior PR (better implementation, more review progress, or from a known contributor) and mark the inferior one as "close", explaining which PR it duplicates and why that one is preferred. Use the related_prs field to reference the other PR(s).
+1. **malicious** — Apparently hostile PRs that look intended to harm the project, its users, or its infrastructure. Use this category ONLY for PRs that show signs of deliberate intent, not mere incompetence or sloppiness. Examples: attempts to compromise CI runners (workflow files that exfiltrate secrets, run untrusted code with elevated permissions, or grant write access to forks), supply-chain attacks via go.mod (swapping a dependency to a typo-squatted/untrusted fork, pinning to a tampered commit, adding post-install or build-time hooks that execute arbitrary code), deliberately weakened cryptography or RNG, code that exfiltrates private keys/secrets/tokens, obfuscated or encoded payloads with no legitimate purpose, backdoors disguised as bug fixes, and intentional consensus-breaking changes presented as innocuous refactors. Strict bar: if it looks like an honest mistake, even a dangerous one, it is NOT malicious — use "close" or "changes-requested" instead. When marking malicious, the explanation must point to the specific lines/files that demonstrate hostile intent. This category should be very rare.
 
-2. **urgent** — Truly time-sensitive, needs immediate maintainer attention. Reasons: security vulnerabilities, consensus bugs, data corruption risks, critical regressions in recent releases. This category should be rare — do NOT use it simply because a PR is from a known contributor or is a performance improvement.
+2. **close** — Should be closed. Reasons: spam, clearly broken, AI-generated slop with no value, abandoned with no response to feedback, trivial cosmetic-only changes with no functional value, or duplicate of another open PR. For duplicates: identify the superior PR (better implementation, more review progress, or from a known contributor) and mark the inferior one as "close", explaining which PR it duplicates and why that one is preferred. Use the related_prs field to reference the other PR(s).
 
-3. **quick-win** — Low-effort, low-risk PRs that a maintainer can act on quickly. This includes: PRs already approved and ready to merge (CI passing or only flaky/unrelated failures, no unresolved review comments), as well as small, well-scoped PRs that are correct and easy to review (bug fixes with clear root cause, straightforward refactors, small feature additions with tests). The PR must still be substantive — do NOT include trivial cosmetic-only changes here (those belong in "close").
+3. **urgent** — Truly time-sensitive, needs immediate maintainer attention. Reasons: security vulnerabilities, consensus bugs, data corruption risks, critical regressions in recent releases. This category should be rare — do NOT use it simply because a PR is from a known contributor or is a performance improvement.
 
-4. **changes-requested** — The PR has actionable feedback that the author needs to address before it can proceed. Reasons: maintainer/reviewer requested changes, CI checks are failing on tests relevant to the PR's changes, unresolved review threads with concrete asks. Do NOT use this for flaky or unrelated test failures — geth CI has known flaky tests, so only count failures that are clearly related to the PR's modified code paths.
+4. **quick-win** — Low-effort, low-risk PRs that a maintainer can act on quickly. This includes: PRs already approved and ready to merge (CI passing or only flaky/unrelated failures, no unresolved review comments), as well as small, well-scoped PRs that are correct and easy to review (bug fixes with clear root cause, straightforward refactors, small feature additions with tests). The PR must still be substantive — do NOT include trivial cosmetic-only changes here (those belong in "close").
 
-5. **needs-review** — Substantive PRs that need a maintainer to review. This is the default category for PRs that don't fit the above: feature additions, refactors, non-trivial improvements, work-in-progress, new PRs awaiting first review.
+5. **changes-requested** — The PR has actionable feedback that the author needs to address before it can proceed. Reasons: maintainer/reviewer requested changes, CI checks are failing on tests relevant to the PR's changes, unresolved review threads with concrete asks. Do NOT use this for flaky or unrelated test failures — geth CI has known flaky tests, so only count failures that are clearly related to the PR's modified code paths.
+
+6. **needs-review** — Substantive PRs that need a maintainer to review. This is the default category for PRs that don't fit the above: feature additions, refactors, non-trivial improvements, work-in-progress, new PRs awaiting first review.
 
 ## Dependency Update PRs
 
@@ -109,7 +111,7 @@ var analysisSchema = func() string {
 		"properties": map[string]any{
 			"category": map[string]any{
 				"type": "string",
-				"enum": []string{"close", "urgent", "quick-win", "changes-requested", "needs-review"},
+				"enum": []string{"malicious", "close", "urgent", "quick-win", "changes-requested", "needs-review"},
 			},
 			"confidence": map[string]any{
 				"type": "number",
